@@ -11,8 +11,6 @@ export interface Logger {
   info(msg: string, fields?: Record<string, unknown>): void;
   warn(msg: string, fields?: Record<string, unknown>): void;
   error(msg: string, fields?: Record<string, unknown>): void;
-  /** Derive a logger that always includes `bindings` in its output. */
-  child(bindings: Record<string, unknown>): Logger;
 }
 
 function wrap(p: PinoLogger): Logger {
@@ -21,7 +19,6 @@ function wrap(p: PinoLogger): Logger {
     info: (msg, fields) => p.info(fields ?? {}, msg),
     warn: (msg, fields) => p.warn(fields ?? {}, msg),
     error: (msg, fields) => p.error(fields ?? {}, msg),
-    child: (bindings) => wrap(p.child(bindings)),
   };
 }
 

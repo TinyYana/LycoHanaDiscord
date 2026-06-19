@@ -18,12 +18,3 @@ export interface ActivityWeights {
   interaction: number;
   voicePer10Min: number;
 }
-
-/**
- * Hysteresis gate for the active-member role (spec §4.7): grant at/above
- * `high`, revoke below `low`, hold in between. Nullable until configured.
- */
-export interface ActivityThresholds {
-  high: number | null;
-  low: number | null;
-}

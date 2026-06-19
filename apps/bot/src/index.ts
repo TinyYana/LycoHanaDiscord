@@ -2,8 +2,8 @@ import path from "node:path";
 import { config as loadDotenv } from "dotenv";
 import { Events } from "discord.js";
 import { createDb, createRepositories } from "@lycohana/db";
-import { ACTIVITY_TIME_ZONE, DEFAULT_ACTIVITY_LIMITS } from "@lycohana/domain";
 import { loadEnv } from "./config/env";
+import { buildRuntimeConfig } from "./config/runtime";
 import { createLogger } from "./logger";
 import { createClient } from "./discord/client";
 import { registerCommands } from "./discord/register-commands";
@@ -19,6 +19,7 @@ loadDotenv({ path: path.resolve(__dirname, "../../../.env") });
 async function main(): Promise<void> {
   const env = loadEnv();
   const logger = createLogger(env.LOG_LEVEL);
+  const config = buildRuntimeConfig(env);
 
   process.on("unhandledRejection", (reason) =>
     logger.error("unhandledRejection", { reason: String(reason) }),
@@ -34,13 +35,13 @@ async function main(): Promise<void> {
   const repos = createRepositories(db);
 
   const client = createClient();
-  const ctx: CommandContext = { logger, repos };
+  const ctx: CommandContext = { logger, repos, config };
 
   registerActivityTracking(client, {
     repos,
     logger,
-    limits: DEFAULT_ACTIVITY_LIMITS,
-    timeZone: ACTIVITY_TIME_ZONE,
+    limits: config.limits,
+    timeZone: config.timeZone,
   });
 
   client.once(Events.ClientReady, (ready) => {

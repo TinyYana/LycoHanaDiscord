@@ -6,7 +6,6 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import {
-  ACTIVITY_TIME_ZONE,
   computeActivityScore,
   dateKey,
   monthRange,
@@ -15,8 +14,6 @@ import {
 } from "@lycohana/domain";
 import type { ActivityDaily } from "@lycohana/db";
 import type { Command, CommandContext } from "./types";
-
-const ROLLING_DAYS = 30;
 
 export const activity: Command = {
   data: new SlashCommandBuilder()
@@ -41,7 +38,7 @@ async function showMe(
     return;
   }
 
-  const { start, end } = monthRange(new Date(), ACTIVITY_TIME_ZONE);
+  const { start, end } = monthRange(new Date(), ctx.config.timeZone);
   const rows = await ctx.repos.activity.listForUserBetween(
     interaction.guildId,
     interaction.user.id,
@@ -79,8 +76,9 @@ async function showStats(
   }
 
   const now = new Date();
-  const from = rollingWindowStart(now, ROLLING_DAYS, ACTIVITY_TIME_ZONE);
-  const to = dateKey(now, ACTIVITY_TIME_ZONE);
+  const windowDays = ctx.config.activeMemberWindowDays;
+  const from = rollingWindowStart(now, windowDays, ctx.config.timeZone);
+  const to = dateKey(now, ctx.config.timeZone);
 
   const config = await ctx.repos.guildConfig.ensure(interaction.guildId);
   const totals = await ctx.repos.activity.aggregateByUserBetween(interaction.guildId, from, to);
@@ -89,27 +87,22 @@ async function showStats(
     .sort((a, b) => a - b);
 
   const embed = new EmbedBuilder()
-    .setTitle("📊 活躍度概況（滾動 30 天）")
+    .setTitle(`📊 活躍度概況（滾動 ${windowDays} 天）`)
     .setDescription(`期間：${from} ~ ${to}\n有活動成員：**${scores.length}** 人`)
     .setFooter({ text: "僅供觀察門檻分佈 · 不是公開排行榜" });
 
   if (scores.length > 0) {
-    const min = scores[0];
-    const max = scores[scores.length - 1];
     const median = scores[Math.floor(scores.length / 2)];
     embed.addFields({
       name: "分數",
-      value: `min ${fmt(min)} · median ${fmt(median)} · max ${fmt(max)}`,
+      value: `min ${fmt(scores[0])} · median ${fmt(median)} · max ${fmt(scores[scores.length - 1])}`,
     });
-    embed.addFields({ name: "分佈", value: histogram(scores) });
 
-    const { high, low } = { high: config.activityThresholdHigh, low: config.activityThresholdLow };
+    const { activityThresholdHigh: high, activityThresholdLow: low } = config;
     if (high != null || low != null) {
-      const atHigh = high != null ? scores.filter((s) => s >= high).length : null;
-      const belowLow = low != null ? scores.filter((s) => s < low).length : null;
       const parts: string[] = [];
-      if (atHigh != null) parts.push(`≥ 高標(${high})：${atHigh} 人`);
-      if (belowLow != null) parts.push(`< 低標(${low})：${belowLow} 人`);
+      if (high != null) parts.push(`≥ 高標(${high})：${scores.filter((s) => s >= high).length} 人`);
+      if (low != null) parts.push(`< 低標(${low})：${scores.filter((s) => s < low).length} 人`);
       embed.addFields({ name: "門檻", value: parts.join("\n") });
     } else {
       embed.addFields({ name: "門檻", value: "尚未設定高標/低標（見 M4）" });
@@ -141,22 +134,4 @@ function formatDuration(seconds: number): string {
 
 function fmt(score: number): string {
   return Number.isInteger(score) ? String(score) : score.toFixed(1);
-}
-
-/** Coarse text histogram over fixed score buckets. */
-function histogram(scores: number[]): string {
-  const edges = [0, 1, 5, 10, 20, 50, 100, Infinity];
-  const labels = ["0", "1-4", "5-9", "10-19", "20-49", "50-99", "100+"];
-  const counts = new Array(labels.length).fill(0) as number[];
-  for (const score of scores) {
-    for (let i = 0; i < labels.length; i++) {
-      if (score >= edges[i] && score < edges[i + 1]) {
-        counts[i] += 1;
-        break;
-      }
-    }
-  }
-  return labels
-    .map((label, i) => `\`${label.padStart(6)}\` ${"▇".repeat(counts[i])} ${counts[i]}`)
-    .join("\n");
 }
