@@ -1,6 +1,6 @@
 {
   "name": "lycohana-bot",
-  "version": "3.0.0",
+  "version": "0.0.0",
   "private": true,
   "type": "commonjs",
   "description": "彼岸花 Discord Bot v3.0 — community operations core.",
@@ -15,7 +15,9 @@
     "dev": "pnpm --filter @lycohana/bot dev",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @lycohana/db db:generate",
+    "db:migrate": "pnpm --filter @lycohana/db db:migrate"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

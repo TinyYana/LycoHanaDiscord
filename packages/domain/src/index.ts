@@ -1,7 +1,9 @@
 /**
- * @lycohana/domain — pure logic modules (no discord.js dependency).
+ * @lycohana/domain — pure logic layer (no discord.js, no drizzle).
  *
- * Populated in later milestones: activity scoring, active-member role
- * threshold checks, rolling/calendar time-window aggregation.
+ * Organized by feature. Activity value types live here now; active-member
+ * threshold logic and time-window helpers arrive with M3/M4.
  */
-export const DOMAIN_PACKAGE = "@lycohana/domain";
+export * from "./activity";
+export * from "./embed";
+export * from "./honeypot";

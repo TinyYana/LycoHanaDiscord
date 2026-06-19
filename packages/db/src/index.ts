@@ -1,7 +1,10 @@
 /**
- * @lycohana/db — Drizzle schema, migrations, db client, and repositories.
+ * @lycohana/db — Drizzle schema, entity types, db client and repositories.
  *
- * Populated in M1. Dev uses Drizzle's SQLite driver as a substitute for
- * PostgreSQL; the dialect is isolated to this package.
+ * SQLite dialect (dev substitute for PostgreSQL), isolated to this package.
+ * Migrations live in ./drizzle and are applied via the db:migrate script.
  */
-export const DB_PACKAGE = "@lycohana/db";
+export * as schema from "./schema";
+export * from "./schema";
+export * from "./client";
+export * from "./repositories";
