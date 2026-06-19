@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { ActivityCounts } from "@lycohana/domain";
 import type { Db } from "../client";
 import { activityDaily, type ActivityDaily } from "../schema";
@@ -6,11 +6,26 @@ import { activityDaily, type ActivityDaily } from "../schema";
 /** Per-call deltas to add to a member's daily counts. */
 export type ActivityDelta = Partial<ActivityCounts>;
 
+/** Summed counts for one member over a date range. */
+export interface UserActivityTotals {
+  userId: string;
+  counts: ActivityCounts;
+}
+
 export interface ActivityRepository {
   /** The member's row for a single calendar day, if any. */
   getDay(guildId: string, userId: string, date: string): Promise<ActivityDaily | undefined>;
   /** Atomically add `delta` to the member's counts for `date` (YYYY-MM-DD). */
   increment(guildId: string, userId: string, date: string, delta: ActivityDelta): Promise<void>;
+  /** All of a member's daily rows within [from, to] (inclusive). */
+  listForUserBetween(
+    guildId: string,
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<ActivityDaily[]>;
+  /** Per-member summed counts within [from, to] (inclusive) for the guild. */
+  aggregateByUserBetween(guildId: string, from: string, to: string): Promise<UserActivityTotals[]>;
 }
 
 export function createActivityRepository(db: Db): ActivityRepository {
@@ -55,6 +70,52 @@ export function createActivityRepository(db: Db): ActivityRepository {
             interactionCount: sql`${activityDaily.interactionCount} + ${values.interactionCount}`,
           },
         });
+    },
+
+    async listForUserBetween(guildId, userId, from, to) {
+      return db
+        .select()
+        .from(activityDaily)
+        .where(
+          and(
+            eq(activityDaily.guildId, guildId),
+            eq(activityDaily.userId, userId),
+            gte(activityDaily.date, from),
+            lte(activityDaily.date, to),
+          ),
+        );
+    },
+
+    async aggregateByUserBetween(guildId, from, to) {
+      const rows = await db
+        .select({
+          userId: activityDaily.userId,
+          chatCount: sql<number>`coalesce(sum(${activityDaily.chatCount}), 0)`,
+          voiceSeconds: sql<number>`coalesce(sum(${activityDaily.voiceSeconds}), 0)`,
+          imageCount: sql<number>`coalesce(sum(${activityDaily.imageCount}), 0)`,
+          musicCount: sql<number>`coalesce(sum(${activityDaily.musicCount}), 0)`,
+          interactionCount: sql<number>`coalesce(sum(${activityDaily.interactionCount}), 0)`,
+        })
+        .from(activityDaily)
+        .where(
+          and(
+            eq(activityDaily.guildId, guildId),
+            gte(activityDaily.date, from),
+            lte(activityDaily.date, to),
+          ),
+        )
+        .groupBy(activityDaily.userId);
+
+      return rows.map((r) => ({
+        userId: r.userId,
+        counts: {
+          chatCount: r.chatCount,
+          voiceSeconds: r.voiceSeconds,
+          imageCount: r.imageCount,
+          musicCount: r.musicCount,
+          interactionCount: r.interactionCount,
+        },
+      }));
     },
   };
 }

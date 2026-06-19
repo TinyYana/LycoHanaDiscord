@@ -1,11 +1,11 @@
-/**
- * Minimal structured logger: one JSON object per line, level-filtered.
- * Dependency-free — enough for a single-process bot, swappable later.
- */
+import { pino, type Logger as PinoLogger } from "pino";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-const LEVEL_ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
-
+/**
+ * Thin structured-logging facade over pino. Call sites use `info(msg, fields)`;
+ * the implementation forwards to pino. Pretty output in dev, JSON in prod.
+ */
 export interface Logger {
   debug(msg: string, fields?: Record<string, unknown>): void;
   info(msg: string, fields?: Record<string, unknown>): void;
@@ -15,20 +15,29 @@ export interface Logger {
   child(bindings: Record<string, unknown>): Logger;
 }
 
-export function createLogger(minLevel: LogLevel, base: Record<string, unknown> = {}): Logger {
-  const threshold = LEVEL_ORDER[minLevel];
-
-  function log(level: LogLevel, msg: string, fields?: Record<string, unknown>): void {
-    if (LEVEL_ORDER[level] < threshold) return;
-    const line = JSON.stringify({ time: new Date().toISOString(), level, msg, ...base, ...fields });
-    (level === "warn" || level === "error" ? process.stderr : process.stdout).write(`${line}\n`);
-  }
-
+function wrap(p: PinoLogger): Logger {
   return {
-    debug: (msg, fields) => log("debug", msg, fields),
-    info: (msg, fields) => log("info", msg, fields),
-    warn: (msg, fields) => log("warn", msg, fields),
-    error: (msg, fields) => log("error", msg, fields),
-    child: (bindings) => createLogger(minLevel, { ...base, ...bindings }),
+    debug: (msg, fields) => p.debug(fields ?? {}, msg),
+    info: (msg, fields) => p.info(fields ?? {}, msg),
+    warn: (msg, fields) => p.warn(fields ?? {}, msg),
+    error: (msg, fields) => p.error(fields ?? {}, msg),
+    child: (bindings) => wrap(p.child(bindings)),
   };
+}
+
+export function createLogger(level: LogLevel): Logger {
+  const pretty = process.env.NODE_ENV !== "production";
+  return wrap(
+    pino({
+      level,
+      ...(pretty
+        ? {
+            transport: {
+              target: "pino-pretty",
+              options: { translateTime: "SYS:standard", ignore: "pid,hostname" },
+            },
+          }
+        : {}),
+    }),
+  );
 }

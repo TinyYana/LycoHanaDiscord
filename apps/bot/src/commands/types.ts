@@ -4,14 +4,13 @@ import type {
   SlashCommandOptionsOnlyBuilder,
   SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
+import type { Repositories } from "@lycohana/db";
 import type { Logger } from "../logger";
 
-/**
- * Shared dependencies passed to every command. Grows as milestones need it
- * (repositories arrive with M3); kept to `logger` for M2.
- */
+/** Shared dependencies passed to every command. */
 export interface CommandContext {
   logger: Logger;
+  repos: Repositories;
 }
 
 /** Any of the slash-command builder shapes a command might use. */

@@ -1,11 +1,14 @@
 import path from "node:path";
 import { config as loadDotenv } from "dotenv";
 import { Events } from "discord.js";
+import { createDb, createRepositories } from "@lycohana/db";
+import { ACTIVITY_TIME_ZONE, DEFAULT_ACTIVITY_LIMITS } from "@lycohana/domain";
 import { loadEnv } from "./config/env";
 import { createLogger } from "./logger";
 import { createClient } from "./discord/client";
 import { registerCommands } from "./discord/register-commands";
 import { createInteractionHandler } from "./discord/interaction-handler";
+import { registerActivityTracking } from "./activity";
 import { commands } from "./commands";
 import type { CommandContext } from "./commands/types";
 
@@ -27,8 +30,18 @@ async function main(): Promise<void> {
     process.exit(1);
   });
 
+  const db = createDb(env.DATABASE_URL);
+  const repos = createRepositories(db);
+
   const client = createClient();
-  const ctx: CommandContext = { logger };
+  const ctx: CommandContext = { logger, repos };
+
+  registerActivityTracking(client, {
+    repos,
+    logger,
+    limits: DEFAULT_ACTIVITY_LIMITS,
+    timeZone: ACTIVITY_TIME_ZONE,
+  });
 
   client.once(Events.ClientReady, (ready) => {
     logger.info("bot ready", { user: ready.user.tag, guilds: ready.guilds.cache.size });
