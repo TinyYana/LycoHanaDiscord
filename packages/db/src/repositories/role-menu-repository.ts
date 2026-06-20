@@ -23,6 +23,8 @@ export interface RoleMenuRepository {
   create(input: CreateRoleMenuInput): Promise<RoleMenuWithOptions>;
   getById(id: number): Promise<RoleMenuWithOptions | undefined>;
   setMessageId(id: number, messageId: string): Promise<void>;
+  /** Remove a menu and its options (used to roll back a failed creation). */
+  delete(id: number): Promise<void>;
 }
 
 export function createRoleMenuRepository(db: Db): RoleMenuRepository {
@@ -35,18 +37,35 @@ export function createRoleMenuRepository(db: Db): RoleMenuRepository {
 
   return {
     async create(input) {
-      const [menu] = await db.insert(roleMenus).values(input.menu).returning();
-      if (!menu) throw new Error("failed to create role menu");
-      await db
-        .insert(roleMenuOptions)
-        .values(input.options.map((option) => ({ ...option, menuId: menu.id })));
-      return (await getById(menu.id)) as RoleMenuWithOptions;
+      // Menu + options must land together: a failed second insert would
+      // otherwise orphan the menu, so do both in one transaction.
+      return db.transaction(async (tx) => {
+        const [menu] = await tx.insert(roleMenus).values(input.menu).returning();
+        if (!menu) throw new Error("failed to create role menu");
+        if (input.options.length > 0) {
+          await tx
+            .insert(roleMenuOptions)
+            .values(input.options.map((option) => ({ ...option, menuId: menu.id })));
+        }
+        const options = await tx
+          .select()
+          .from(roleMenuOptions)
+          .where(eq(roleMenuOptions.menuId, menu.id));
+        return { menu, options };
+      });
     },
 
     getById,
 
     async setMessageId(id, messageId) {
       await db.update(roleMenus).set({ messageId }).where(eq(roleMenus.id, id));
+    },
+
+    async delete(id) {
+      await db.transaction(async (tx) => {
+        await tx.delete(roleMenuOptions).where(eq(roleMenuOptions.menuId, id));
+        await tx.delete(roleMenus).where(eq(roleMenus.id, id));
+      });
     },
   };
 }

@@ -2,7 +2,7 @@
 
 The community-operations bot for the LycoHana Discord server. It keeps activity tracking, roles, welcome messages, embeds, and basic safeguards in one maintainable workflow without turning a community tool into an entire platform.
 
-[繁體中文](./README.zh-TW.md) · **English** · [Operator guide (繁體中文)](./docs/USER_GUIDE.zh-TW.md)
+[繁體中文](./README.zh-TW.md) · **English** · [Operator guide (繁體中文)](./docs/USER_GUIDE.zh-TW.md) · [Feature spec (繁體中文)](./docs/SPEC.zh-TW.md)
 
 ## What this project does
 
@@ -18,6 +18,7 @@ The scope is deliberately limited to the community-operations core. It is not a 
 - **Welcome and private leave logs:** sends welcome messages and keeps departure logs in an administrator-selected channel.
 - **Embed drafts and templates:** previews and confirms embeds in an ephemeral admin workflow before sending; templates are persisted while unfinished drafts remain in memory.
 - **Honeypot channels:** deletes messages from non-staff members in decoy channels, then applies a configured timeout or ban and records the action.
+- **Dynamic voice channels:** creates a member-owned voice channel when someone joins a configured entry channel, then removes it after everyone leaves.
 - **Per-guild configuration:** stores channel, threshold, weight, and role IDs in the database instead of hard-coding them.
 
 ## Stack and structure
@@ -51,6 +52,7 @@ Invite the bot with the `bot` and `applications.commands` scopes. Grant only the
 
 - View Channels, Send Messages, and Embed Links
 - Manage Roles for active-member and self-service roles
+- Manage Channels, Manage Roles, and Move Members for dynamic voice channels
 - Manage Messages, Moderate Members, and Ban Members for honeypot channels
 
 The bot's role must sit above every role and member it needs to manage. Discord's role hierarchy still applies even when the permission checkbox looks correct.
@@ -144,7 +146,7 @@ The bot connects directly to PostgreSQL and does not require the Supabase Data A
 
 Activity tracking stores per-member daily counters, not message bodies. Image and music-share detection still reads attachment metadata and message content, which is why the Message Content Intent is required, but that content is not written to the database.
 
-Chat cooldowns, active voice sessions, and unfinished embed drafts live only in memory and disappear after a restart. Completed daily aggregates, guild configuration, templates, and moderation logs remain in PostgreSQL. That tradeoff is intentional for now; persisting every piece of temporary state would add more machinery than this bot currently needs.
+Chat cooldowns, active voice sessions, and unfinished embed drafts live only in memory and disappear after a restart. Completed daily aggregates, guild configuration, dynamic-voice ownership records, templates, and moderation logs remain in PostgreSQL. Persisting dynamic-voice ownership lets startup reconciliation safely remove empty bot-created channels without guessing from their names.
 
 ## Development scripts
 

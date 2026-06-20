@@ -22,6 +22,8 @@ export function buildRuntimeConfig(env: Env): RuntimeConfig {
       chatCooldownMs: env.ACTIVITY_CHAT_COOLDOWN_MS,
       voiceDailyCapSeconds: env.ACTIVITY_VOICE_DAILY_CAP_SECONDS,
       interactionDailyCap: env.ACTIVITY_INTERACTION_DAILY_CAP,
+      imageDailyCap: env.ACTIVITY_IMAGE_DAILY_CAP,
+      musicDailyCap: env.ACTIVITY_MUSIC_DAILY_CAP,
     },
   };
 }

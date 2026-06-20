@@ -1,6 +1,6 @@
 import { type Client, Events, type VoiceBasedChannel, type VoiceState } from "discord.js";
-import { cappedDelta, dateKey } from "@lycohana/domain";
-import { errMessage, type ActivityTrackerDeps } from "./shared";
+import { dateKey } from "@lycohana/domain";
+import { applyDelta, errMessage, type ActivityTrackerDeps } from "./shared";
 
 interface Accrual {
   guildId: string;
@@ -26,12 +26,10 @@ export function registerVoiceTracking(client: Client, deps: ActivityTrackerDeps)
     const seconds = Math.floor((now - acc.since) / 1000);
     if (seconds <= 0) return;
 
+    // The daily cap is enforced atomically inside the repository, so we hand
+    // over the raw seconds and let `LEAST(current + delta, cap)` clamp them.
     const date = dateKey(new Date(now), timeZone);
-    const day = await repos.activity.getDay(acc.guildId, userId, date);
-    const allowed = cappedDelta(day?.voiceSeconds ?? 0, seconds, limits.voiceDailyCapSeconds);
-    if (allowed > 0) {
-      await repos.activity.increment(acc.guildId, userId, date, { voiceSeconds: allowed });
-    }
+    await applyDelta(repos, acc.guildId, userId, date, { voiceSeconds: seconds }, limits);
   }
 
   client.on(Events.VoiceStateUpdate, async (oldState, newState) => {

@@ -14,6 +14,9 @@ export const guildConfig = pgTable("guild_config", {
   // Moderation log
   logChannelId: text("log_channel_id"),
 
+  // Dynamic voice channel entry point
+  dynamicVoiceTriggerChannelId: text("dynamic_voice_trigger_channel_id"),
+
   // Active-member role + activity scoring
   activeMemberRoleId: text("active_member_role_id"),
   activityThresholdHigh: integer("activity_threshold_high"),

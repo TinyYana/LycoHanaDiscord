@@ -29,10 +29,16 @@ export interface ActivityLimits {
   voiceDailyCapSeconds: number;
   /** Max interactions (replies + reactions given) counted per day. */
   interactionDailyCap: number;
+  /** Max image-attachment credits counted per day. */
+  imageDailyCap: number;
+  /** Max music-share credits counted per day. */
+  musicDailyCap: number;
 }
 
 export const DEFAULT_ACTIVITY_LIMITS: ActivityLimits = {
   chatCooldownMs: 60_000,
   voiceDailyCapSeconds: 4 * 60 * 60,
   interactionDailyCap: 20,
+  imageDailyCap: 10,
+  musicDailyCap: 10,
 };

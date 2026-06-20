@@ -6,16 +6,18 @@
   "description": "彼岸花 Discord Bot v3.0 — community operations core.",
   "author": "TinyYana",
   "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -p packages/domain/tsconfig.json --noEmit --composite false && tsc -p packages/db/tsconfig.json --noEmit --composite false && tsc -p apps/bot/tsconfig.json --noEmit --composite false",
     "dev": "pnpm --filter @lycohana/bot dev",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test": "vitest run",
     "db:generate": "pnpm --filter @lycohana/db db:generate",
     "db:migrate": "pnpm --filter @lycohana/db db:migrate"
   },
@@ -27,6 +29,7 @@
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.2.4"
   }
 }

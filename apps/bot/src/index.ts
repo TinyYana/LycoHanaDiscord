@@ -16,6 +16,7 @@ import { createEmbedDraftInteractionHandler, EmbedDraftStore } from "./embed-dra
 import { registerMemberEvents } from "./members";
 import { createModerationLog } from "./moderation";
 import { registerHoneypot } from "./honeypot";
+import { registerDynamicVoice } from "./dynamic-voice";
 import type { CommandContext } from "./commands/types";
 
 // .env lives at the monorepo root; resolve it regardless of the bot's cwd.
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
     timeZone: config.timeZone,
   });
   registerMemberEvents(client, { repos, logger });
+  registerDynamicVoice(client, { repos, logger });
 
   const moderationLog = createModerationLog({ repos, logger });
   registerHoneypot(client, {

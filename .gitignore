@@ -10,7 +10,8 @@ dist/
 .env.*
 !.env.example
 
-# local sqlite database (dev substitute for PostgreSQL)
+# local database scratch files (the project uses Supabase PostgreSQL; these
+# patterns just guard against stray local DB files being committed)
 data/
 *.db
 *.db-journal
@@ -20,3 +21,5 @@ data/
 *.log
 .DS_Store
 Thumbs.db
+
+reports

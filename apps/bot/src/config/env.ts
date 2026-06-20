@@ -44,6 +44,16 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_ACTIVITY_LIMITS.interactionDailyCap),
+  ACTIVITY_IMAGE_DAILY_CAP: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_ACTIVITY_LIMITS.imageDailyCap),
+  ACTIVITY_MUSIC_DAILY_CAP: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_ACTIVITY_LIMITS.musicDailyCap),
   ACTIVE_MEMBER_WINDOW_DAYS: z.coerce.number().int().positive().default(ACTIVE_MEMBER_WINDOW_DAYS),
   // Cron expression for the daily active-member sweep (spec M4).
   ACTIVE_MEMBER_CRON: z.string().min(1).default(DEFAULT_ACTIVE_MEMBER_CRON),

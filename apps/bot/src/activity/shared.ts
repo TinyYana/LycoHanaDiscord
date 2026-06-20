@@ -1,5 +1,5 @@
-import type { ActivityDelta, Repositories } from "@lycohana/db";
-import { cappedDelta, type ActivityLimits } from "@lycohana/domain";
+import type { ActivityCaps, ActivityDelta, Repositories } from "@lycohana/db";
+import type { ActivityLimits } from "@lycohana/domain";
 import type { Logger } from "../logger";
 
 export { errMessage } from "../errors";
@@ -16,8 +16,10 @@ function hasPositive(delta: ActivityDelta): boolean {
 }
 
 /**
- * Apply a delta to a member's daily counts, capping the interaction dimension
- * against today's total (spec §4.5). Mutates `delta`. No-op if nothing remains.
+ * Apply a delta to a member's daily counts (spec §4.5). The per-dimension daily
+ * caps are enforced atomically by the repository (`LEAST(current + delta, cap)`),
+ * so concurrent events can never push a capped counter past its limit. No-op if
+ * the delta carries nothing positive.
  */
 export async function applyDelta(
   repos: Repositories,
@@ -27,17 +29,16 @@ export async function applyDelta(
   delta: ActivityDelta,
   limits: ActivityLimits,
 ): Promise<void> {
-  if (delta.interactionCount && delta.interactionCount > 0) {
-    const day = await repos.activity.getDay(guildId, userId, date);
-    const allowed = cappedDelta(
-      day?.interactionCount ?? 0,
-      delta.interactionCount,
-      limits.interactionDailyCap,
-    );
-    if (allowed > 0) delta.interactionCount = allowed;
-    else delete delta.interactionCount;
-  }
-
   if (!hasPositive(delta)) return;
-  await repos.activity.increment(guildId, userId, date, delta);
+  await repos.activity.increment(guildId, userId, date, delta, capsFrom(limits));
+}
+
+/** Map the runtime limits onto the repository's per-dimension cap contract. */
+function capsFrom(limits: ActivityLimits): ActivityCaps {
+  return {
+    voiceSeconds: limits.voiceDailyCapSeconds,
+    imageCount: limits.imageDailyCap,
+    musicCount: limits.musicDailyCap,
+    interactionCount: limits.interactionDailyCap,
+  };
 }

@@ -91,7 +91,13 @@ function canSend(
   if (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) {
     return false;
   }
+  // The log message is an embed, so EmbedLinks is required too — otherwise the
+  // preflight passes but the Discord send fails and only surfaces in the catch.
   return channel
     .permissionsFor(me)
-    .has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]);
+    .has([
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks,
+    ]);
 }

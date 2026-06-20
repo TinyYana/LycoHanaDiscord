@@ -8,6 +8,7 @@ import {
 } from "discord.js";
 import type { ActivityWeights } from "@lycohana/domain";
 import type { GuildConfig } from "@lycohana/db";
+import { sensitiveRoleWarning } from "../discord/role-policy";
 import type { Command, CommandContext } from "./types";
 
 /** A chat-input interaction already known to be in a guild (guildId: string). */
@@ -111,6 +112,18 @@ export const config: Command = {
             .setDescription("管理紀錄頻道（啟用時必填）")
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
         ),
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("dynamic-voice")
+        .setDescription("設定動態語音頻道入口")
+        .addBooleanOption((o) => o.setName("enabled").setDescription("是否啟用").setRequired(true))
+        .addChannelOption((o) =>
+          o
+            .setName("channel")
+            .setDescription("成員加入後會建立專屬頻道的語音入口")
+            .addChannelTypes(ChannelType.GuildVoice),
+        ),
     ),
 
   async execute(interaction, ctx) {
@@ -166,6 +179,7 @@ async function view(interaction: GuildChatInput, ctx: CommandContext): Promise<v
     { name: "歡迎訊息", value: welcomeSummary(cfg) },
     { name: "離開紀錄", value: channelSummary(cfg.leaveLogChannelId) },
     { name: "管理紀錄", value: channelSummary(cfg.logChannelId) },
+    { name: "動態語音入口", value: channelSummary(cfg.dynamicVoiceTriggerChannelId) },
   );
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
@@ -221,6 +235,24 @@ async function setLogChannel(interaction: GuildChatInput, ctx: CommandContext): 
   );
 }
 
+async function setDynamicVoice(interaction: GuildChatInput, ctx: CommandContext): Promise<void> {
+  const enabled = interaction.options.getBoolean("enabled", true);
+  const channel = interaction.options.getChannel("channel");
+  const current = await ctx.repos.guildConfig.ensure(interaction.guildId);
+  const channelId = channel?.id ?? current.dynamicVoiceTriggerChannelId;
+  if (enabled && !channelId) {
+    await reply(interaction, "啟用動態語音頻道時，請選擇入口語音頻道。");
+    return;
+  }
+  await ctx.repos.guildConfig.update(interaction.guildId, {
+    dynamicVoiceTriggerChannelId: enabled ? channelId : null,
+  });
+  await reply(
+    interaction,
+    enabled ? `已啟用動態語音頻道，入口為 <#${channelId}>。` : "已停用動態語音頻道。",
+  );
+}
+
 async function setActiveRole(interaction: GuildChatInput, ctx: CommandContext): Promise<void> {
   const role = interaction.options.getRole("role", true);
   await ctx.repos.guildConfig.update(interaction.guildId, { activeMemberRoleId: role.id });
@@ -229,13 +261,13 @@ async function setActiveRole(interaction: GuildChatInput, ctx: CommandContext): 
   const me = interaction.guild?.members.me;
   const unmanageable =
     me && "comparePositionTo" in role && me.roles.highest.comparePositionTo(role) <= 0;
-  await reply(
-    interaction,
-    `已設定活躍成員身分組為 <@&${role.id}>。` +
-      (unmanageable
-        ? "\n⚠️ 此身分組高於我的最高身分組，我將無法發放/回收，請調整身分組順序。"
-        : ""),
-  );
+  const warnings = [
+    unmanageable
+      ? "⚠️ 此身分組高於我的最高身分組，我將無法發放/回收，請調整身分組順序。"
+      : undefined,
+    sensitiveRoleWarning(role.permissions),
+  ].filter((line): line is string => Boolean(line));
+  await reply(interaction, [`已設定活躍成員身分組為 <@&${role.id}>。`, ...warnings].join("\n"));
 }
 
 async function setThresholds(interaction: GuildChatInput, ctx: CommandContext): Promise<void> {
@@ -295,4 +327,5 @@ const CONFIG_HANDLERS: Record<string, ConfigHandler> = {
   welcome: setWelcome,
   "leave-log": setLeaveLog,
   "log-channel": setLogChannel,
+  "dynamic-voice": setDynamicVoice,
 };
