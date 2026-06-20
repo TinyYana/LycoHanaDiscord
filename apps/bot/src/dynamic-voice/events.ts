@@ -30,30 +30,8 @@ export function registerDynamicVoice(client: Client, deps: DynamicVoiceDeps): vo
   // Channels waiting out their empty-grace window, keyed by channel id.
   const pendingCleanup = new Map<string, NodeJS.Timeout>();
 
-  client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
-    // Resolve the trigger channel once and hand it to both paths. The trigger
-    // is operator-owned and must be filtered out of cleanup entirely.
-    let triggerChannelId: string | null;
-    try {
-      const config = await deps.repos.guildConfig.get(newState.guild.id);
-      triggerChannelId = config?.dynamicVoiceTriggerChannelId ?? null;
-    } catch (error: unknown) {
-      deps.logger.error("dynamic voice config lookup failed", voiceErrorFields(newState, error));
-      return;
-    }
-
-    await createFromTrigger(newState, triggerChannelId, deps, creating).catch((error: unknown) => {
-      deps.logger.error("dynamic voice creation failed", voiceErrorFields(newState, error));
-    });
-
-    // Someone (re)joined a channel that was counting down to deletion — keep it.
-    if (newState.channelId) cancelCleanup(newState.channelId, pendingCleanup);
-
-    await scheduleCleanupIfEmpty(oldState, newState, triggerChannelId, deps, pendingCleanup).catch(
-      (error: unknown) => {
-        deps.logger.error("dynamic voice cleanup failed", voiceErrorFields(oldState, error));
-      },
-    );
+  client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    void handleVoiceTransition(oldState, newState, deps, creating, pendingCleanup);
   });
 
   client.on(Events.ChannelDelete, async (channel) => {
@@ -75,15 +53,64 @@ export function registerDynamicVoice(client: Client, deps: DynamicVoiceDeps): vo
   });
 }
 
+/**
+ * A voiceStateUpdate covers four distinct transitions; only a *channel change*
+ * matters here. Same-channel updates (mute/deafen/stream/etc.) share oldId ===
+ * newId and must neither create nor clean. Entering the trigger (join or
+ * move-in) creates a room; leaving a non-trigger room may clean it.
+ */
+async function handleVoiceTransition(
+  oldState: VoiceState,
+  newState: VoiceState,
+  deps: DynamicVoiceDeps,
+  creating: Set<string>,
+  pending: Map<string, NodeJS.Timeout>,
+): Promise<void> {
+  const oldId = oldState.channelId;
+  const newId = newState.channelId;
+  if (oldId === newId) return; // not a channel change
+
+  const triggerChannelId = await resolveTriggerChannelId(newState, deps);
+  if (triggerChannelId === undefined) return; // lookup failed (already logged)
+
+  if (newId && newId === triggerChannelId) {
+    await createFromTrigger(newState, deps, creating).catch((error: unknown) => {
+      deps.logger.error("dynamic voice creation failed", voiceErrorFields(newState, error));
+    });
+  }
+
+  // (Re)joined a room that was counting down to deletion — keep it.
+  if (newId) cancelCleanup(newId, pending);
+
+  // Left a room (disconnect or move-out), and it isn't the trigger → maybe clean.
+  if (oldId && oldId !== triggerChannelId) {
+    await scheduleCleanupIfEmpty(oldState, deps, pending).catch((error: unknown) => {
+      deps.logger.error("dynamic voice cleanup failed", voiceErrorFields(oldState, error));
+    });
+  }
+}
+
+/** Resolve the guild's trigger channel; `undefined` signals a lookup failure. */
+async function resolveTriggerChannelId(
+  state: VoiceState,
+  deps: DynamicVoiceDeps,
+): Promise<string | null | undefined> {
+  try {
+    const config = await deps.repos.guildConfig.get(state.guild.id);
+    return config?.dynamicVoiceTriggerChannelId ?? null;
+  } catch (error: unknown) {
+    deps.logger.error("dynamic voice config lookup failed", voiceErrorFields(state, error));
+    return undefined;
+  }
+}
+
 async function createFromTrigger(
   state: VoiceState,
-  triggerChannelId: string | null,
   deps: DynamicVoiceDeps,
   creating: Set<string>,
 ): Promise<void> {
   const member = state.member;
-  if (!member || member.user.bot || !state.channelId) return;
-  if (!triggerChannelId || state.channelId !== triggerChannelId) return;
+  if (!member || member.user.bot) return;
 
   const key = `${state.guild.id}:${member.id}`;
   if (creating.has(key)) return;
@@ -160,17 +187,14 @@ async function rollbackChannel(
 
 async function scheduleCleanupIfEmpty(
   oldState: VoiceState,
-  newState: VoiceState,
-  triggerChannelId: string | null,
   deps: DynamicVoiceDeps,
   pending: Map<string, NodeJS.Timeout>,
 ): Promise<void> {
-  // `oldState.channel` is a live cache getter; capture the id up front.
+  // The caller has already established this is a channel change away from a
+  // non-trigger channel. `oldState.channel` is a live cache getter; if the
+  // channel isn't cached there's nothing safe to act on.
   const channel = oldState.channel;
-  if (!channel || oldState.channelId === newState.channelId) return;
-  // The trigger channel is operator-owned, never bot-managed: filter it out
-  // before any lookup so it can never be deleted by cleanup.
-  if (channel.id === triggerChannelId) return;
+  if (!channel) return;
   const managed = await deps.repos.dynamicVoice.get(channel.id);
   if (!managed || channel.members.size > 0) return;
 
