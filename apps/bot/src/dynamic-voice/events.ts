@@ -149,18 +149,23 @@ async function deleteIfEmpty(
   triggerChannelId: string | null,
   deps: DynamicVoiceDeps,
 ): Promise<void> {
-  if (!oldState.channel || oldState.channelId === newState.channelId) return;
+  // `oldState.channel` is a live cache getter that returns null once the
+  // channel is deleted — capture the reference and id up front so we never
+  // read them off a getter that has gone null after `.delete()`.
+  const channel = oldState.channel;
+  if (!channel || oldState.channelId === newState.channelId) return;
   // The trigger channel is operator-owned, never bot-managed: filter it out
   // before any lookup so it can never be deleted by cleanup.
-  if (oldState.channel.id === triggerChannelId) return;
-  const managed = await deps.repos.dynamicVoice.get(oldState.channel.id);
-  if (!managed || oldState.channel.members.size > 0) return;
+  if (channel.id === triggerChannelId) return;
+  const managed = await deps.repos.dynamicVoice.get(channel.id);
+  if (!managed || channel.members.size > 0) return;
 
-  await oldState.channel.delete("動態語音頻道已空，進行清理");
-  await deps.repos.dynamicVoice.remove(oldState.channel.id);
+  const channelId = channel.id;
+  await channel.delete("動態語音頻道已空，進行清理");
+  await deps.repos.dynamicVoice.remove(channelId);
   deps.logger.info("empty dynamic voice channel deleted", {
     guild: oldState.guild.id,
-    channel: oldState.channel.id,
+    channel: channelId,
   });
 }
 
