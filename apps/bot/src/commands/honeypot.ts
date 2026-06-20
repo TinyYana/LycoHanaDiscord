@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import type { HoneypotAction } from "@lycohana/domain";
 import type { Command, CommandContext } from "./types";
+import { buildHoneypotNotice } from "../honeypot";
 
 /** A chat-input interaction already known to be in a guild (guildId: string). */
 type GuildChatInput = ChatInputCommandInteraction<"cached" | "raw">;
@@ -82,9 +83,41 @@ async function add(interaction: GuildChatInput, ctx: CommandContext): Promise<vo
     timeoutSeconds,
   });
 
+  const posted = await postNotice(interaction, channel.id, action);
   const detail =
     action === "ban" ? "封鎖" : `禁言（${timeoutSeconds ? `${minutes} 分鐘` : "預設時長"}）`;
-  await reply(interaction, `已將 <#${channel.id}> 設為誘捕頻道，處置方式：${detail}。`);
+  const noticeLine = posted
+    ? "\n已在該頻道張貼警告訊息提醒一般成員。"
+    : "\n⚠️ 我無法在該頻道發送訊息（缺少檢視／發送／嵌入連結權限），請手動提醒或調整權限。";
+  await reply(
+    interaction,
+    `已將 <#${channel.id}> 設為誘捕頻道，處置方式：${detail}。${noticeLine}`,
+  );
+}
+
+/** Post the public warning embed into the channel; returns false if blocked. */
+async function postNotice(
+  interaction: GuildChatInput,
+  channelId: string,
+  action: HoneypotAction,
+): Promise<boolean> {
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (!channel || !channel.isTextBased() || channel.isDMBased()) return false;
+  const me = channel.guild.members.me;
+  const canSend = me
+    ?.permissionsIn(channel)
+    .has([
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks,
+    ]);
+  if (!canSend) return false;
+  try {
+    await channel.send({ embeds: [buildHoneypotNotice(action)] });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function remove(interaction: GuildChatInput, ctx: CommandContext): Promise<void> {
