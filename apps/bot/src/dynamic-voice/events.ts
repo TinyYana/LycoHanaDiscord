@@ -34,6 +34,16 @@ export function registerDynamicVoice(client: Client, deps: DynamicVoiceDeps): vo
       return;
     }
 
+    // TEMP diagnostic: trace every voice transition so we can see exactly which
+    // channel is old/new relative to the trigger. Remove once the cleanup
+    // behaviour is confirmed in the live guild.
+    deps.logger.info("dv voice transition", {
+      user: newState.id,
+      old: oldState.channelId,
+      new: newState.channelId,
+      trigger: triggerChannelId,
+    });
+
     await createFromTrigger(newState, triggerChannelId, deps, creating).catch((error: unknown) => {
       deps.logger.error("dynamic voice creation failed", voiceErrorFields(newState, error));
     });
@@ -158,6 +168,14 @@ async function deleteIfEmpty(
   // before any lookup so it can never be deleted by cleanup.
   if (channel.id === triggerChannelId) return;
   const managed = await deps.repos.dynamicVoice.get(channel.id);
+  // TEMP diagnostic: who is the cleanup looking at, and is the channel really
+  // empty? Helps tell "user left" apart from a stale members cache.
+  deps.logger.info("dv cleanup check", {
+    channel: channel.id,
+    managed: Boolean(managed),
+    members: channel.members.size,
+    memberIds: [...channel.members.keys()],
+  });
   if (!managed || channel.members.size > 0) return;
 
   const channelId = channel.id;
