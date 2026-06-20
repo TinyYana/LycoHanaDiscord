@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { jsonb, pgTable, serial, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { type EmbedTemplatePayload } from "@lycohana/domain";
 import { timestamps } from "./_shared";
 
@@ -6,13 +6,13 @@ import { timestamps } from "./_shared";
  * Saved embed template (spec §5.5). Drafts live in memory; only committed
  * templates are persisted here. `name` is unique per guild (spec §7).
  */
-export const embedTemplates = sqliteTable(
+export const embedTemplates = pgTable(
   "embed_templates",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     guildId: text("guild_id").notNull(),
     name: text("name").notNull(),
-    payload: text("payload", { mode: "json" }).$type<EmbedTemplatePayload>().notNull(),
+    payload: jsonb("payload").$type<EmbedTemplatePayload>().notNull(),
     createdBy: text("created_by").notNull(),
     ...timestamps(),
   },

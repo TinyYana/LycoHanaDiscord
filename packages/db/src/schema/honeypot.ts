@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { HONEYPOT_ACTIONS } from "@lycohana/domain";
 
 /**
@@ -6,13 +6,13 @@ import { HONEYPOT_ACTIONS } from "@lycohana/domain";
  * (`channel_id` unique). `timeout` is the default action; `timeoutSeconds`
  * applies when the action is `timeout`.
  */
-export const honeypotChannels = sqliteTable("honeypot_channels", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const honeypotChannels = pgTable("honeypot_channels", {
+  id: serial("id").primaryKey(),
   guildId: text("guild_id").notNull(),
   channelId: text("channel_id").notNull().unique(),
   action: text("action", { enum: HONEYPOT_ACTIONS }).notNull().default("timeout"),
   timeoutSeconds: integer("timeout_seconds"),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .$defaultFn(() => new Date()),
 });

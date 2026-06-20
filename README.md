@@ -6,7 +6,7 @@ Discord community-operations bot for the LycoHana server.
 
 - TypeScript · discord.js v14 · Drizzle ORM
 - pnpm monorepo
-- **Database:** Drizzle + SQLite (dev substitute for PostgreSQL)
+- **Database:** Drizzle + PostgreSQL (Supabase, via postgres.js)
 
 ## Layout
 

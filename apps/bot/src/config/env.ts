@@ -21,8 +21,8 @@ const envSchema = z.object({
   DISCORD_CLIENT_ID: z.string().min(1, "DISCORD_CLIENT_ID is required"),
   DISCORD_GUILD_ID: z.string().optional(),
 
-  // Database (SQLite file path — dev substitute for PostgreSQL)
-  DATABASE_URL: z.string().min(1).default("./data/lycohana.db"),
+  // Database (PostgreSQL connection string — Supabase)
+  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   // Runtime
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

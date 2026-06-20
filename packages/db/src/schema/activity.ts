@@ -1,4 +1,4 @@
-import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { timestamps } from "./_shared";
 
 /**
@@ -6,7 +6,7 @@ import { timestamps } from "./_shared";
  * stored; cooldown and voice sessions live in memory. Both the rolling-30d
  * role gate and the monthly personal view aggregate from here.
  */
-export const activityDaily = sqliteTable(
+export const activityDaily = pgTable(
   "activity_daily",
   {
     guildId: text("guild_id").notNull(),

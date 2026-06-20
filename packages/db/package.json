@@ -18,10 +18,10 @@
     "db:migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.4",
     "@lycohana/domain": "workspace:*",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10"

@@ -89,12 +89,14 @@ export function createActivityRepository(db: Db): ActivityRepository {
     async aggregateByUserBetween(guildId, from, to) {
       const rows = await db
         .select({
+          // Postgres returns sum() as a numeric string; cast to int so these
+          // come back as JS numbers.
           userId: activityDaily.userId,
-          chatCount: sql<number>`coalesce(sum(${activityDaily.chatCount}), 0)`,
-          voiceSeconds: sql<number>`coalesce(sum(${activityDaily.voiceSeconds}), 0)`,
-          imageCount: sql<number>`coalesce(sum(${activityDaily.imageCount}), 0)`,
-          musicCount: sql<number>`coalesce(sum(${activityDaily.musicCount}), 0)`,
-          interactionCount: sql<number>`coalesce(sum(${activityDaily.interactionCount}), 0)`,
+          chatCount: sql<number>`coalesce(sum(${activityDaily.chatCount}), 0)::int`,
+          voiceSeconds: sql<number>`coalesce(sum(${activityDaily.voiceSeconds}), 0)::int`,
+          imageCount: sql<number>`coalesce(sum(${activityDaily.imageCount}), 0)::int`,
+          musicCount: sql<number>`coalesce(sum(${activityDaily.musicCount}), 0)::int`,
+          interactionCount: sql<number>`coalesce(sum(${activityDaily.interactionCount}), 0)::int`,
         })
         .from(activityDaily)
         .where(
