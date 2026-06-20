@@ -8,6 +8,7 @@ export interface RuntimeConfig {
   activeMemberCron: string;
   embedDraftTtlMs: number;
   honeypotTimeoutSeconds: number;
+  dynamicVoiceEmptyGraceMs: number;
   limits: ActivityLimits;
 }
 
@@ -18,6 +19,7 @@ export function buildRuntimeConfig(env: Env): RuntimeConfig {
     activeMemberCron: env.ACTIVE_MEMBER_CRON,
     embedDraftTtlMs: env.EMBED_DRAFT_TTL_MINUTES * 60_000,
     honeypotTimeoutSeconds: env.HONEYPOT_TIMEOUT_SECONDS,
+    dynamicVoiceEmptyGraceMs: env.DYNAMIC_VOICE_EMPTY_GRACE_SECONDS * 1000,
     limits: {
       chatCooldownMs: env.ACTIVITY_CHAT_COOLDOWN_MS,
       voiceDailyCapSeconds: env.ACTIVITY_VOICE_DAILY_CAP_SECONDS,

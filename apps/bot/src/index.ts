@@ -53,7 +53,11 @@ async function main(): Promise<void> {
     timeZone: config.timeZone,
   });
   registerMemberEvents(client, { repos, logger });
-  registerDynamicVoice(client, { repos, logger });
+  registerDynamicVoice(client, {
+    repos,
+    logger,
+    emptyGraceMs: config.dynamicVoiceEmptyGraceMs,
+  });
 
   const moderationLog = createModerationLog({ repos, logger });
   registerHoneypot(client, {

@@ -17,10 +17,18 @@ import { dynamicVoiceChannelName } from "./name";
 export interface DynamicVoiceDeps {
   repos: Repositories;
   logger: Logger;
+  /**
+   * How long a bot-created channel may sit empty before it is deleted. A grace
+   * window lets the owner briefly disconnect/reconnect without losing the room.
+   * 0 means delete immediately.
+   */
+  emptyGraceMs: number;
 }
 
 export function registerDynamicVoice(client: Client, deps: DynamicVoiceDeps): void {
   const creating = new Set<string>();
+  // Channels waiting out their empty-grace window, keyed by channel id.
+  const pendingCleanup = new Map<string, NodeJS.Timeout>();
 
   client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
     // Resolve the trigger channel once and hand it to both paths. The trigger
@@ -34,25 +42,22 @@ export function registerDynamicVoice(client: Client, deps: DynamicVoiceDeps): vo
       return;
     }
 
-    // TEMP diagnostic: trace every voice transition so we can see exactly which
-    // channel is old/new relative to the trigger. Remove once the cleanup
-    // behaviour is confirmed in the live guild.
-    deps.logger.info("dv voice transition", {
-      user: newState.id,
-      old: oldState.channelId,
-      new: newState.channelId,
-      trigger: triggerChannelId,
-    });
-
     await createFromTrigger(newState, triggerChannelId, deps, creating).catch((error: unknown) => {
       deps.logger.error("dynamic voice creation failed", voiceErrorFields(newState, error));
     });
-    await deleteIfEmpty(oldState, newState, triggerChannelId, deps).catch((error: unknown) => {
-      deps.logger.error("dynamic voice cleanup failed", voiceErrorFields(oldState, error));
-    });
+
+    // Someone (re)joined a channel that was counting down to deletion — keep it.
+    if (newState.channelId) cancelCleanup(newState.channelId, pendingCleanup);
+
+    await scheduleCleanupIfEmpty(oldState, newState, triggerChannelId, deps, pendingCleanup).catch(
+      (error: unknown) => {
+        deps.logger.error("dynamic voice cleanup failed", voiceErrorFields(oldState, error));
+      },
+    );
   });
 
   client.on(Events.ChannelDelete, async (channel) => {
+    cancelCleanup(channel.id, pendingCleanup);
     await deps.repos.dynamicVoice.remove(channel.id).catch((error: unknown) => {
       deps.logger.error("dynamic voice record cleanup failed", {
         channel: channel.id,
@@ -153,38 +158,80 @@ async function rollbackChannel(
   }
 }
 
-async function deleteIfEmpty(
+async function scheduleCleanupIfEmpty(
   oldState: VoiceState,
   newState: VoiceState,
   triggerChannelId: string | null,
   deps: DynamicVoiceDeps,
+  pending: Map<string, NodeJS.Timeout>,
 ): Promise<void> {
-  // `oldState.channel` is a live cache getter that returns null once the
-  // channel is deleted — capture the reference and id up front so we never
-  // read them off a getter that has gone null after `.delete()`.
+  // `oldState.channel` is a live cache getter; capture the id up front.
   const channel = oldState.channel;
   if (!channel || oldState.channelId === newState.channelId) return;
   // The trigger channel is operator-owned, never bot-managed: filter it out
   // before any lookup so it can never be deleted by cleanup.
   if (channel.id === triggerChannelId) return;
   const managed = await deps.repos.dynamicVoice.get(channel.id);
-  // TEMP diagnostic: who is the cleanup looking at, and is the channel really
-  // empty? Helps tell "user left" apart from a stale members cache.
-  deps.logger.info("dv cleanup check", {
-    channel: channel.id,
-    managed: Boolean(managed),
-    members: channel.members.size,
-    memberIds: [...channel.members.keys()],
-  });
   if (!managed || channel.members.size > 0) return;
 
-  const channelId = channel.id;
-  await channel.delete("動態語音頻道已空，進行清理");
+  if (deps.emptyGraceMs <= 0) {
+    await runCleanup(channel.id, oldState.guild, deps, pending);
+    return;
+  }
+  scheduleCleanup(channel.id, oldState.guild, deps, pending);
+}
+
+/** Arm (once) a delayed cleanup for an emptied channel after the grace window. */
+function scheduleCleanup(
+  channelId: string,
+  guild: Guild,
+  deps: DynamicVoiceDeps,
+  pending: Map<string, NodeJS.Timeout>,
+): void {
+  if (pending.has(channelId)) return; // already counting down
+
+  const timer = setTimeout(() => {
+    void runCleanup(channelId, guild, deps, pending).catch((error: unknown) => {
+      deps.logger.error("dynamic voice delayed cleanup failed", {
+        guild: guild.id,
+        channel: channelId,
+        error: errMessage(error),
+      });
+    });
+  }, deps.emptyGraceMs);
+  // A pending room cleanup should never keep the process alive on its own.
+  timer.unref?.();
+  pending.set(channelId, timer);
+}
+
+function cancelCleanup(channelId: string, pending: Map<string, NodeJS.Timeout>): void {
+  const timer = pending.get(channelId);
+  if (!timer) return;
+  clearTimeout(timer);
+  pending.delete(channelId);
+}
+
+/** Delete a managed channel iff it is still tracked and still empty. */
+async function runCleanup(
+  channelId: string,
+  guild: Guild,
+  deps: DynamicVoiceDeps,
+  pending: Map<string, NodeJS.Timeout>,
+): Promise<void> {
+  pending.delete(channelId);
+  const managed = await deps.repos.dynamicVoice.get(channelId);
+  if (!managed) return;
+
+  const channel = guild.channels.cache.get(channelId);
+  if (!channel || !channel.isVoiceBased()) {
+    await deps.repos.dynamicVoice.remove(channelId);
+    return;
+  }
+  if (channel.members.size > 0) return; // someone came back during the grace window
+
+  await channel.delete("動態語音頻道空置逾時，進行清理");
   await deps.repos.dynamicVoice.remove(channelId);
-  deps.logger.info("empty dynamic voice channel deleted", {
-    guild: oldState.guild.id,
-    channel: channelId,
-  });
+  deps.logger.info("empty dynamic voice channel deleted", { guild: guild.id, channel: channelId });
 }
 
 async function reconcileManagedChannels(

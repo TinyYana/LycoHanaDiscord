@@ -68,6 +68,9 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_HONEYPOT_TIMEOUT_SECONDS),
+  // Grace window before an emptied dynamic voice channel is deleted, so a brief
+  // disconnect/reconnect doesn't destroy the room. 0 = delete immediately.
+  DYNAMIC_VOICE_EMPTY_GRACE_SECONDS: z.coerce.number().int().nonnegative().default(60),
 });
 
 export type Env = z.infer<typeof envSchema>;
