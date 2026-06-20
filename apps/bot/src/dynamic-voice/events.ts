@@ -23,10 +23,21 @@ export function registerDynamicVoice(client: Client, deps: DynamicVoiceDeps): vo
   const creating = new Set<string>();
 
   client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
-    await createFromTrigger(newState, deps, creating).catch((error: unknown) => {
+    // Resolve the trigger channel once and hand it to both paths. The trigger
+    // is operator-owned and must be filtered out of cleanup entirely.
+    let triggerChannelId: string | null;
+    try {
+      const config = await deps.repos.guildConfig.get(newState.guild.id);
+      triggerChannelId = config?.dynamicVoiceTriggerChannelId ?? null;
+    } catch (error: unknown) {
+      deps.logger.error("dynamic voice config lookup failed", voiceErrorFields(newState, error));
+      return;
+    }
+
+    await createFromTrigger(newState, triggerChannelId, deps, creating).catch((error: unknown) => {
       deps.logger.error("dynamic voice creation failed", voiceErrorFields(newState, error));
     });
-    await deleteIfEmpty(oldState, newState, deps).catch((error: unknown) => {
+    await deleteIfEmpty(oldState, newState, triggerChannelId, deps).catch((error: unknown) => {
       deps.logger.error("dynamic voice cleanup failed", voiceErrorFields(oldState, error));
     });
   });
@@ -51,14 +62,13 @@ export function registerDynamicVoice(client: Client, deps: DynamicVoiceDeps): vo
 
 async function createFromTrigger(
   state: VoiceState,
+  triggerChannelId: string | null,
   deps: DynamicVoiceDeps,
   creating: Set<string>,
 ): Promise<void> {
   const member = state.member;
   if (!member || member.user.bot || !state.channelId) return;
-
-  const config = await deps.repos.guildConfig.get(state.guild.id);
-  if (state.channelId !== config?.dynamicVoiceTriggerChannelId) return;
+  if (!triggerChannelId || state.channelId !== triggerChannelId) return;
 
   const key = `${state.guild.id}:${member.id}`;
   if (creating.has(key)) return;
@@ -136,24 +146,15 @@ async function rollbackChannel(
 async function deleteIfEmpty(
   oldState: VoiceState,
   newState: VoiceState,
+  triggerChannelId: string | null,
   deps: DynamicVoiceDeps,
 ): Promise<void> {
   if (!oldState.channel || oldState.channelId === newState.channelId) return;
+  // The trigger channel is operator-owned, never bot-managed: filter it out
+  // before any lookup so it can never be deleted by cleanup.
+  if (oldState.channel.id === triggerChannelId) return;
   const managed = await deps.repos.dynamicVoice.get(oldState.channel.id);
   if (!managed || oldState.channel.members.size > 0) return;
-
-  // Never delete the configured trigger channel, even if a stale record marks
-  // it as managed (e.g. a former dynamic channel was later set as the trigger).
-  // Forget the bogus record so it stops being treated as cleanup-eligible.
-  const config = await deps.repos.guildConfig.get(oldState.guild.id);
-  if (oldState.channel.id === config?.dynamicVoiceTriggerChannelId) {
-    await deps.repos.dynamicVoice.remove(oldState.channel.id);
-    deps.logger.warn("skipped deleting the dynamic voice trigger channel", {
-      guild: oldState.guild.id,
-      channel: oldState.channel.id,
-    });
-    return;
-  }
 
   await oldState.channel.delete("動態語音頻道已空，進行清理");
   await deps.repos.dynamicVoice.remove(oldState.channel.id);
