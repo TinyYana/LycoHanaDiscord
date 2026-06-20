@@ -20,3 +20,5 @@ export interface EmbedTemplatePayload {
   footer?: string;
   fields?: EmbedFieldData[];
 }
+
+export const DEFAULT_EMBED_DRAFT_TTL_MINUTES = 60;

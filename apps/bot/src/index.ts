@@ -9,7 +9,13 @@ import { createClient } from "./discord/client";
 import { registerCommands } from "./discord/register-commands";
 import { createInteractionHandler } from "./discord/interaction-handler";
 import { registerActivityTracking } from "./activity";
-import { commands } from "./commands";
+import { scheduleActiveMemberSweep } from "./active-member";
+import { createCommands } from "./commands";
+import { handleRoleMenuInteraction } from "./role-menu";
+import { createEmbedDraftInteractionHandler, EmbedDraftStore } from "./embed-draft";
+import { registerMemberEvents } from "./members";
+import { createModerationLog } from "./moderation";
+import { registerHoneypot } from "./honeypot";
 import type { CommandContext } from "./commands/types";
 
 // .env lives at the monorepo root; resolve it regardless of the bot's cwd.
@@ -36,6 +42,8 @@ async function main(): Promise<void> {
 
   const client = createClient();
   const ctx: CommandContext = { logger, repos, config };
+  const embedDrafts = new EmbedDraftStore(config.embedDraftTtlMs);
+  const commands = createCommands(embedDrafts);
 
   registerActivityTracking(client, {
     repos,
@@ -43,11 +51,38 @@ async function main(): Promise<void> {
     limits: config.limits,
     timeZone: config.timeZone,
   });
+  registerMemberEvents(client, { repos, logger });
+
+  const moderationLog = createModerationLog({ repos, logger });
+  registerHoneypot(client, {
+    repos,
+    logger,
+    moderationLog,
+    defaultTimeoutSeconds: config.honeypotTimeoutSeconds,
+  });
+
+  scheduleActiveMemberSweep(
+    client,
+    {
+      repos,
+      logger,
+      windowDays: config.activeMemberWindowDays,
+      timeZone: config.timeZone,
+    },
+    config.activeMemberCron,
+  );
 
   client.once(Events.ClientReady, (ready) => {
     logger.info("bot ready", { user: ready.user.tag, guilds: ready.guilds.cache.size });
   });
-  client.on(Events.InteractionCreate, createInteractionHandler(commands, ctx));
+  client.on(
+    Events.InteractionCreate,
+    createInteractionHandler(
+      commands,
+      [handleRoleMenuInteraction, createEmbedDraftInteractionHandler(embedDrafts)],
+      ctx,
+    ),
+  );
   client.on(Events.Error, (error) => logger.error("client error", { error: error.message }));
 
   // Register slash commands first so they exist when the gateway connects.

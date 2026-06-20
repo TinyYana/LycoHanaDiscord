@@ -3,6 +3,9 @@ import {
   ACTIVE_MEMBER_WINDOW_DAYS,
   ACTIVITY_TIME_ZONE,
   DEFAULT_ACTIVITY_LIMITS,
+  DEFAULT_ACTIVE_MEMBER_CRON,
+  DEFAULT_EMBED_DRAFT_TTL_MINUTES,
+  DEFAULT_HONEYPOT_TIMEOUT_SECONDS,
 } from "@lycohana/domain";
 
 /**
@@ -42,6 +45,19 @@ const envSchema = z.object({
     .positive()
     .default(DEFAULT_ACTIVITY_LIMITS.interactionDailyCap),
   ACTIVE_MEMBER_WINDOW_DAYS: z.coerce.number().int().positive().default(ACTIVE_MEMBER_WINDOW_DAYS),
+  // Cron expression for the daily active-member sweep (spec M4).
+  ACTIVE_MEMBER_CRON: z.string().min(1).default(DEFAULT_ACTIVE_MEMBER_CRON),
+  EMBED_DRAFT_TTL_MINUTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_EMBED_DRAFT_TTL_MINUTES),
+  // Default honeypot timeout when a channel sets no per-channel duration (spec M8).
+  HONEYPOT_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_HONEYPOT_TIMEOUT_SECONDS),
 });
 
 export type Env = z.infer<typeof envSchema>;

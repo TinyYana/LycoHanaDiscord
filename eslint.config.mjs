@@ -8,5 +8,10 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    rules: {
+      complexity: ["error", 8],
+    },
+  },
   prettier,
 );

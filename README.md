@@ -37,4 +37,14 @@ pnpm --filter @lycohana/bot start
 
 ## Milestones
 
-Built milestone-by-milestone per the v3.0 spec. Current: **M0 — project skeleton**.
+Implemented through **M7**:
+
+- M0–M2: workspace, database, Discord client and slash-command foundation
+- M3–M4: privacy-safe activity aggregation and active-member role gate
+- M5: persistent self-service button role menus with availability windows
+- M6: configurable welcome messages and private leave logs
+- M7: admin-only in-memory Embed drafts, previews, confirmation, sending and templates
+
+Embed fields and template deletion remain outside the scoped M7 first version. Draft lifetime is
+configured with `EMBED_DRAFT_TTL_MINUTES`; server-specific IDs live in guild settings rather than
+source code.

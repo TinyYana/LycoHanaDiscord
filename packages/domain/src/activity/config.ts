@@ -18,6 +18,9 @@ export const ACTIVITY_TIME_ZONE = "Asia/Taipei";
 /** Rolling window (days) for the active-member score (spec §4.6). */
 export const ACTIVE_MEMBER_WINDOW_DAYS = 30;
 
+/** Daily active-member sweep at 04:00 in ACTIVITY_TIME_ZONE. */
+export const DEFAULT_ACTIVE_MEMBER_CRON = "0 4 * * *";
+
 /** Anti-gaming limits (spec §4.4, §4.5). Tunable post-launch (spec §8). */
 export interface ActivityLimits {
   /** Min gap between two counted chat messages from the same member. */

@@ -1,4 +1,4 @@
-import { type Client, Events, type VoiceBasedChannel } from "discord.js";
+import { type Client, Events, type VoiceBasedChannel, type VoiceState } from "discord.js";
 import { cappedDelta, dateKey } from "@lycohana/domain";
 import { errMessage, type ActivityTrackerDeps } from "./shared";
 
@@ -17,14 +17,6 @@ interface Accrual {
 export function registerVoiceTracking(client: Client, deps: ActivityTrackerDeps): void {
   const { repos, logger, limits, timeZone } = deps;
   const accruing = new Map<string, Accrual>(); // userId -> accrual
-
-  function humanIds(channel: VoiceBasedChannel): Set<string> {
-    const ids = new Set<string>();
-    for (const member of channel.members.values()) {
-      if (!member.user.bot) ids.add(member.id);
-    }
-    return ids;
-  }
 
   async function flush(userId: string, now: number): Promise<void> {
     const acc = accruing.get(userId);
@@ -46,36 +38,65 @@ export function registerVoiceTracking(client: Client, deps: ActivityTrackerDeps)
     const now = Date.now();
     try {
       const guild = newState.guild;
-      const afkChannelId = guild.afkChannelId;
-
-      const affected: VoiceBasedChannel[] = [];
-      if (oldState.channel) affected.push(oldState.channel);
-      if (newState.channel && newState.channel.id !== oldState.channel?.id) {
-        affected.push(newState.channel);
-      }
-
-      for (const channel of affected) {
-        const humans = humanIds(channel);
-        const eligible = channel.id !== afkChannelId && humans.size >= 2;
-
-        // Start accrual for eligible humans not already accruing.
-        if (eligible) {
-          for (const userId of humans) {
-            if (!accruing.has(userId)) {
-              accruing.set(userId, { guildId: guild.id, channelId: channel.id, since: now });
-            }
-          }
-        }
-
-        // Stop accrual for members in this channel who are no longer eligible
-        // (left, or the channel dropped below two humans / became AFK).
-        for (const [userId, acc] of [...accruing.entries()]) {
-          if (acc.channelId !== channel.id) continue;
-          if (!eligible || !humans.has(userId)) await flush(userId, now);
-        }
+      for (const channel of affectedChannels(oldState, newState)) {
+        await syncChannelAccrual(channel, guild.id, guild.afkChannelId, now, accruing, flush);
       }
     } catch (error) {
       logger.error("voice tracking failed", { error: errMessage(error) });
     }
   });
+}
+
+function humanIds(channel: VoiceBasedChannel): Set<string> {
+  return new Set(
+    [...channel.members.values()].filter((member) => !member.user.bot).map((member) => member.id),
+  );
+}
+
+function affectedChannels(oldState: VoiceState, newState: VoiceState): VoiceBasedChannel[] {
+  const channels: VoiceBasedChannel[] = [];
+  if (oldState.channel) channels.push(oldState.channel);
+  if (newState.channel && newState.channel.id !== oldState.channel?.id)
+    channels.push(newState.channel);
+  return channels;
+}
+
+async function syncChannelAccrual(
+  channel: VoiceBasedChannel,
+  guildId: string,
+  afkChannelId: string | null,
+  now: number,
+  accruing: Map<string, Accrual>,
+  flush: (userId: string, now: number) => Promise<void>,
+): Promise<void> {
+  const humans = humanIds(channel);
+  const eligible = channel.id !== afkChannelId && humans.size >= 2;
+  if (eligible) startAccrual(channel.id, guildId, humans, now, accruing);
+  await stopIneligibleAccrual(channel.id, humans, eligible, now, accruing, flush);
+}
+
+function startAccrual(
+  channelId: string,
+  guildId: string,
+  humanIds: Set<string>,
+  now: number,
+  accruing: Map<string, Accrual>,
+): void {
+  for (const userId of humanIds) {
+    if (!accruing.has(userId)) accruing.set(userId, { guildId, channelId, since: now });
+  }
+}
+
+async function stopIneligibleAccrual(
+  channelId: string,
+  humanIds: Set<string>,
+  eligible: boolean,
+  now: number,
+  accruing: Map<string, Accrual>,
+  flush: (userId: string, now: number) => Promise<void>,
+): Promise<void> {
+  for (const [userId, accrual] of [...accruing.entries()]) {
+    if (accrual.channelId !== channelId) continue;
+    if (!eligible || !humanIds.has(userId)) await flush(userId, now);
+  }
 }

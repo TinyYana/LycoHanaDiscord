@@ -12,7 +12,7 @@ import {
   rollingWindowStart,
   type ActivityCounts,
 } from "@lycohana/domain";
-import type { ActivityDaily } from "@lycohana/db";
+import type { ActivityDaily, GuildConfig } from "@lycohana/db";
 import type { Command, CommandContext } from "./types";
 
 export const activity: Command = {
@@ -91,25 +91,28 @@ async function showStats(
     .setDescription(`期間：${from} ~ ${to}\n有活動成員：**${scores.length}** 人`)
     .setFooter({ text: "僅供觀察門檻分佈 · 不是公開排行榜" });
 
-  if (scores.length > 0) {
-    const median = scores[Math.floor(scores.length / 2)];
-    embed.addFields({
-      name: "分數",
-      value: `min ${fmt(scores[0])} · median ${fmt(median)} · max ${fmt(scores[scores.length - 1])}`,
-    });
-
-    const { activityThresholdHigh: high, activityThresholdLow: low } = config;
-    if (high != null || low != null) {
-      const parts: string[] = [];
-      if (high != null) parts.push(`≥ 高標(${high})：${scores.filter((s) => s >= high).length} 人`);
-      if (low != null) parts.push(`< 低標(${low})：${scores.filter((s) => s < low).length} 人`);
-      embed.addFields({ name: "門檻", value: parts.join("\n") });
-    } else {
-      embed.addFields({ name: "門檻", value: "尚未設定高標/低標（見 M4）" });
-    }
-  }
+  if (scores.length > 0) addScoreDetails(embed, scores, config);
 
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+}
+
+function addScoreDetails(embed: EmbedBuilder, scores: number[], config: GuildConfig): void {
+  const median = scores[Math.floor(scores.length / 2)];
+  embed.addFields({
+    name: "分數",
+    value: `min ${fmt(scores[0])} · median ${fmt(median)} · max ${fmt(scores[scores.length - 1])}`,
+  });
+
+  const { activityThresholdHigh: high, activityThresholdLow: low } = config;
+  if (high == null && low == null) {
+    embed.addFields({ name: "門檻", value: "尚未設定高標/低標（見 M4）" });
+    return;
+  }
+  const parts: string[] = [];
+  if (high != null)
+    parts.push(`≥ 高標(${high})：${scores.filter((score) => score >= high).length} 人`);
+  if (low != null) parts.push(`< 低標(${low})：${scores.filter((score) => score < low).length} 人`);
+  embed.addFields({ name: "門檻", value: parts.join("\n") });
 }
 
 function sumCounts(rows: ActivityDaily[]): ActivityCounts {

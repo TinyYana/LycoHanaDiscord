@@ -5,6 +5,9 @@ import type { Env } from "./env";
 export interface RuntimeConfig {
   timeZone: string;
   activeMemberWindowDays: number;
+  activeMemberCron: string;
+  embedDraftTtlMs: number;
+  honeypotTimeoutSeconds: number;
   limits: ActivityLimits;
 }
 
@@ -12,6 +15,9 @@ export function buildRuntimeConfig(env: Env): RuntimeConfig {
   return {
     timeZone: env.ACTIVITY_TIME_ZONE,
     activeMemberWindowDays: env.ACTIVE_MEMBER_WINDOW_DAYS,
+    activeMemberCron: env.ACTIVE_MEMBER_CRON,
+    embedDraftTtlMs: env.EMBED_DRAFT_TTL_MINUTES * 60_000,
+    honeypotTimeoutSeconds: env.HONEYPOT_TIMEOUT_SECONDS,
     limits: {
       chatCooldownMs: env.ACTIVITY_CHAT_COOLDOWN_MS,
       voiceDailyCapSeconds: env.ACTIVITY_VOICE_DAILY_CAP_SECONDS,

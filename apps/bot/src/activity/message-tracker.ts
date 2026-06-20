@@ -1,4 +1,4 @@
-import { type Client, Events } from "discord.js";
+import { type Client, Events, type Message } from "discord.js";
 import { dateKey, detectMusicShare, isImageAttachment } from "@lycohana/domain";
 import type { ActivityDelta } from "@lycohana/db";
 import { applyDelta, errMessage, type ActivityTrackerDeps } from "./shared";
@@ -21,34 +21,33 @@ export function registerMessageTracking(client: Client, deps: ActivityTrackerDep
       const { guildId } = message;
       const userId = message.author.id;
       const date = dateKey(new Date(now), timeZone);
-      const delta: ActivityDelta = {};
-
-      // Chat — cooldown-limited; never reads message text.
-      const key = `${guildId}:${userId}`;
-      if (now - (lastChatAt.get(key) ?? 0) >= limits.chatCooldownMs) {
-        lastChatAt.set(key, now);
-        delta.chatCount = 1;
-      }
-
-      // Image — any image-like attachment.
-      if (message.attachments.some((a) => isImageAttachment(a.name, a.contentType))) {
-        delta.imageCount = 1;
-      }
-
-      // Music — known music-service link in content.
-      if (detectMusicShare(message.content)) {
-        delta.musicCount = 1;
-      }
-
-      // Interaction — reply directed at another (non-bot) user.
-      const replied = message.mentions.repliedUser;
-      if (replied && replied.id !== userId && !replied.bot) {
-        delta.interactionCount = 1;
-      }
+      const delta = buildActivityDelta(message, now, lastChatAt, limits.chatCooldownMs);
 
       await applyDelta(repos, guildId, userId, date, delta, limits);
     } catch (error) {
       logger.error("message tracking failed", { error: errMessage(error) });
     }
   });
+}
+
+function buildActivityDelta(
+  message: Message<true>,
+  now: number,
+  lastChatAt: Map<string, number>,
+  chatCooldownMs: number,
+): ActivityDelta {
+  const delta: ActivityDelta = {};
+  const key = `${message.guildId}:${message.author.id}`;
+  if (now - (lastChatAt.get(key) ?? 0) >= chatCooldownMs) {
+    lastChatAt.set(key, now);
+    delta.chatCount = 1;
+  }
+  if (message.attachments.some((item) => isImageAttachment(item.name, item.contentType))) {
+    delta.imageCount = 1;
+  }
+  if (detectMusicShare(message.content)) delta.musicCount = 1;
+
+  const replied = message.mentions.repliedUser;
+  if (replied && replied.id !== message.author.id && !replied.bot) delta.interactionCount = 1;
+  return delta;
 }

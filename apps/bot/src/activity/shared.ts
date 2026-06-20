@@ -2,15 +2,13 @@ import type { ActivityDelta, Repositories } from "@lycohana/db";
 import { cappedDelta, type ActivityLimits } from "@lycohana/domain";
 import type { Logger } from "../logger";
 
+export { errMessage } from "../errors";
+
 export interface ActivityTrackerDeps {
   repos: Repositories;
   logger: Logger;
   limits: ActivityLimits;
   timeZone: string;
-}
-
-export function errMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function hasPositive(delta: ActivityDelta): boolean {
