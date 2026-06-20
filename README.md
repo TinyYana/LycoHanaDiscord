@@ -2,7 +2,7 @@
 
 The community-operations bot for the LycoHana Discord server. It keeps activity tracking, roles, welcome messages, embeds, and basic safeguards in one maintainable workflow without turning a community tool into an entire platform.
 
-[繁體中文](./README.zh-TW.md) · **English**
+[繁體中文](./README.zh-TW.md) · **English** · [Operator guide (繁體中文)](./docs/USER_GUIDE.zh-TW.md)
 
 ## What this project does
 
