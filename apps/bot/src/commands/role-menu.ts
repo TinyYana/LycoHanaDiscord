@@ -13,6 +13,9 @@ const data = new SlashCommandBuilder()
   .setDescription("（管理員）建立自助身分組選單")
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((subcommand) => {
+    // Discord requires all required options before optional ones, so the
+    // required title/channel + role_1/label_1 come first, then the optional
+    // availability window last.
     subcommand
       .setName("create")
       .setDescription("建立按鈕身分組選單")
@@ -25,14 +28,15 @@ const data = new SlashCommandBuilder()
           .setDescription("發送頻道")
           .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setRequired(true),
-      )
+      );
+    addRoleOptions(subcommand);
+    subcommand
       .addStringOption((option) =>
         option.setName("available_from").setDescription("開始時間（ISO 8601，可省略）"),
       )
       .addStringOption((option) =>
         option.setName("available_until").setDescription("結束時間（ISO 8601，可省略）"),
       );
-    addRoleOptions(subcommand);
     return subcommand;
   });
 
