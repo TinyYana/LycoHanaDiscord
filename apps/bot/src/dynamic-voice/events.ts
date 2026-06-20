@@ -142,6 +142,19 @@ async function deleteIfEmpty(
   const managed = await deps.repos.dynamicVoice.get(oldState.channel.id);
   if (!managed || oldState.channel.members.size > 0) return;
 
+  // Never delete the configured trigger channel, even if a stale record marks
+  // it as managed (e.g. a former dynamic channel was later set as the trigger).
+  // Forget the bogus record so it stops being treated as cleanup-eligible.
+  const config = await deps.repos.guildConfig.get(oldState.guild.id);
+  if (oldState.channel.id === config?.dynamicVoiceTriggerChannelId) {
+    await deps.repos.dynamicVoice.remove(oldState.channel.id);
+    deps.logger.warn("skipped deleting the dynamic voice trigger channel", {
+      guild: oldState.guild.id,
+      channel: oldState.channel.id,
+    });
+    return;
+  }
+
   await oldState.channel.delete("動態語音頻道已空，進行清理");
   await deps.repos.dynamicVoice.remove(oldState.channel.id);
   deps.logger.info("empty dynamic voice channel deleted", {
@@ -183,6 +196,17 @@ async function reconcileChannel(
     return;
   }
   if (channel.members.size > 0) return;
+
+  // Guard against a stale record that points at the configured trigger channel.
+  const config = await deps.repos.guildConfig.get(record.guildId);
+  if (record.channelId === config?.dynamicVoiceTriggerChannelId) {
+    await deps.repos.dynamicVoice.remove(record.channelId);
+    deps.logger.warn("dynamic voice record matched the trigger channel; skipping deletion", {
+      guild: record.guildId,
+      channel: record.channelId,
+    });
+    return;
+  }
 
   await channel.delete("Bot 啟動時清理空的動態語音頻道");
   await deps.repos.dynamicVoice.remove(record.channelId);
