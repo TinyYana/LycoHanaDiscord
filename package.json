@@ -1,6 +1,6 @@
 {
   "name": "lycohana-bot",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "commonjs",
   "description": "彼岸花 Discord Bot v3.0 — community operations core.",
