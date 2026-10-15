@@ -17,6 +17,9 @@ data/
 *.db-journal
 *.sqlite
 
+# runtime state written by the bot (e.g. registered-commands hash)
+.runtime/
+
 # logs / os
 *.log
 .DS_Store

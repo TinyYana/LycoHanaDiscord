@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
+    "commands:register": "node dist/register-commands-cli.js",
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "dotenv": "^17.2.3",
     "node-cron": "^4.4.1",
     "pino": "^10.3.1",
+    "tx2": "1.0.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {

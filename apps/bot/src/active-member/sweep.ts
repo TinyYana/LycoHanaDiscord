@@ -1,180 +1,165 @@
-import { type Guild, type GuildMember, PermissionFlagsBits, type Role } from "discord.js";
-import {
-  type ActiveMemberAction,
-  computeActivityScore,
-  dateKey,
-  decideActiveMember,
-  rollingWindowStart,
-} from "@lycohana/domain";
-import type { GuildConfig, Repositories } from "@lycohana/db";
+import type { Guild } from "discord.js";
+import type { RevokeDisabledReason } from "@lycohana/domain";
 import type { Logger } from "../logger";
+import type { Messages } from "../messages";
 import { errMessage } from "../errors";
+import {
+  ACTIVE_MEMBER_SKIP_REASONS,
+  type ActiveMemberCandidatePlan,
+  type ActiveMemberPlanRepos,
+  type ActiveMemberWindowOptions,
+  planActiveMemberGuild,
+  type SweepSkipReason,
+} from "./plan";
+import { candidateReasonText, skipReasonText } from "./text";
 
-export interface ActiveMemberDeps {
-  repos: Repositories;
+export interface ActiveMemberDeps extends ActiveMemberWindowOptions {
+  repos: ActiveMemberPlanRepos;
   logger: Logger;
-  windowDays: number;
-  timeZone: string;
+  messages: Messages;
 }
 
-function hasExemptRole(member: GuildMember, exemptRoleIds: string[]): boolean {
-  return exemptRoleIds.some((id) => member.roles.cache.has(id));
-}
+export type SweepStatus = "ok" | "failed" | "skipped";
 
-/** True if the bot can actually assign/remove this role; logs why if not. */
-function botCanManageRole(guild: Guild, role: Role, logger: Logger): boolean {
-  const me = guild.members.me;
-  if (!me) return false;
-  if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    logger.error("active member: missing ManageRoles", { guild: guild.id });
-    return false;
-  }
-  if (role.managed) {
-    logger.error("active member: role is integration-managed, cannot assign", {
-      guild: guild.id,
-      role: role.id,
-    });
-    return false;
-  }
-  if (me.roles.highest.comparePositionTo(role) <= 0) {
-    logger.error("active member: role is not below the bot's highest role", {
-      guild: guild.id,
-      role: role.id,
-    });
-    return false;
-  }
-  return true;
-}
-
-interface SweepSettings {
-  config: GuildConfig;
-  role: Role;
-  high: number | null;
-  low: number | null;
-}
-
-interface SweepCounts {
+export interface GuildSweepResult {
+  guildId: string;
+  status: SweepStatus;
+  /** Skip reason (`skipped`) or error message (`failed`). */
+  reason?: string;
+  candidates: number;
   granted: number;
   revoked: number;
   failed: number;
+  revokeDisabled?: RevokeDisabledReason;
 }
 
-async function sweepGuild(guild: Guild, deps: ActiveMemberDeps): Promise<void> {
-  const { repos, logger, windowDays, timeZone } = deps;
-  const settings = await resolveSweepSettings(guild, deps);
-  if (!settings) return;
+export interface ActiveMemberSweepResult {
+  status: SweepStatus;
+  /** Why the whole sweep was skipped (e.g. "client not ready"). */
+  reason?: string;
+  startedAt: string;
+  finishedAt: string;
+  guilds: GuildSweepResult[];
+}
 
-  const now = new Date();
-  const from = rollingWindowStart(now, windowDays, timeZone);
-  const to = dateKey(now, timeZone);
-  const totals = await repos.activity.aggregateByUserBetween(guild.id, from, to);
-  const scoreByUser = new Map(
-    totals.map((t) => [t.userId, computeActivityScore(t.counts, settings.config.activityWeights)]),
-  );
-
-  // Need member objects (current roles) for everyone scored or already holding
-  // the role — fetch the guild's members once, then work from cache.
-  await guild.members.fetch();
-  const candidates = new Set<string>([...scoreByUser.keys(), ...settings.role.members.keys()]);
-  const counts: SweepCounts = { granted: 0, revoked: 0, failed: 0 };
-  for (const userId of candidates) {
-    await reconcileCandidate(guild, userId, scoreByUser.get(userId) ?? 0, settings, counts, logger);
-  }
-
-  logger.info("active member sweep done", {
-    guild: guild.id,
-    candidates: candidates.size,
-    ...counts,
+/** Log a skip at the level its reason table entry asks for, with readable text. */
+export function logSweepSkip(
+  deps: Pick<ActiveMemberDeps, "logger" | "messages">,
+  reason: SweepSkipReason,
+  fields: Record<string, unknown> = {},
+): void {
+  deps.logger[ACTIVE_MEMBER_SKIP_REASONS[reason].level]("active member sweep skipped", {
+    ...fields,
+    reason,
+    reasonText: skipReasonText(deps.messages, reason),
   });
 }
 
-async function resolveSweepSettings(
+function emptyGuildResult(guildId: string, status: SweepStatus, reason?: string): GuildSweepResult {
+  return { guildId, status, reason, candidates: 0, granted: 0, revoked: 0, failed: 0 };
+}
+
+async function applyCandidate(
   guild: Guild,
+  roleId: string,
+  candidate: ActiveMemberCandidatePlan,
+  result: GuildSweepResult,
   deps: ActiveMemberDeps,
-): Promise<SweepSettings | undefined> {
-  const config = await deps.repos.guildConfig.get(guild.id);
-  if (!config?.activeMemberRoleId) return undefined;
-  const high = config.activityThresholdHigh;
-  const low = config.activityThresholdLow;
-  if (high == null && low == null) return undefined;
-
-  const role =
-    guild.roles.cache.get(config.activeMemberRoleId) ??
-    (await guild.roles.fetch(config.activeMemberRoleId).catch(() => null));
-  if (!role) {
-    deps.logger.error("active member: role not found", {
-      guild: guild.id,
-      role: config.activeMemberRoleId,
-    });
-    return undefined;
-  }
-  if (!botCanManageRole(guild, role, deps.logger)) return undefined;
-  return { config, role, high, low };
-}
-
-async function reconcileCandidate(
-  guild: Guild,
-  userId: string,
-  score: number,
-  settings: SweepSettings,
-  counts: SweepCounts,
-  logger: Logger,
 ): Promise<void> {
+  const { logger } = deps;
+  const { action, userId, score, reason } = candidate;
+  if (action !== "grant" && action !== "revoke") return;
   const member = guild.members.cache.get(userId);
-  if (!member || member.user.bot || hasExemptRole(member, settings.config.exemptRoleIds)) return;
-
-  const action = decideActiveMember({
-    score,
-    high: settings.high,
-    low: settings.low,
-    hasRole: member.roles.cache.has(settings.role.id),
-  });
-  if (action === "none") return;
-  await changeActiveRole(guild, member, settings.role, action, score, counts, logger);
-}
-
-async function changeActiveRole(
-  guild: Guild,
-  member: GuildMember,
-  role: Role,
-  action: Exclude<ActiveMemberAction, "none">,
-  score: number,
-  counts: SweepCounts,
-  logger: Logger,
-): Promise<void> {
   try {
-    if (action === "grant") await member.roles.add(role, "active-member gate");
-    else await member.roles.remove(role, "active-member gate");
-    counts[action === "grant" ? "granted" : "revoked"] += 1;
+    if (!member) throw new Error("member no longer cached");
+    if (action === "grant") await member.roles.add(roleId, "active-member gate");
+    else await member.roles.remove(roleId, "active-member gate");
+    result[action === "grant" ? "granted" : "revoked"] += 1;
     logger.info(`active member ${action === "grant" ? "granted" : "revoked"}`, {
       guild: guild.id,
-      user: member.id,
+      user: userId,
       score,
+      reason,
+      reasonText: candidateReasonText(deps.messages, reason),
     });
   } catch (error) {
-    counts.failed += 1;
+    result.failed += 1;
     logger.error("active member: role change failed", {
       guild: guild.id,
-      user: member.id,
+      user: userId,
       action,
       error: errMessage(error),
     });
   }
 }
 
-/** Run the active-member gate across every guild the bot is in (spec M4). */
+async function sweepGuild(guild: Guild, deps: ActiveMemberDeps): Promise<GuildSweepResult> {
+  const { logger } = deps;
+  const plan = await planActiveMemberGuild(guild, deps.repos, deps, new Date());
+  if (plan.skipReason || !plan.roleId) {
+    const reason = plan.skipReason ?? "role-not-configured";
+    logSweepSkip(deps, reason, { guild: guild.id, role: plan.roleId });
+    return emptyGuildResult(guild.id, "skipped", reason);
+  }
+
+  const result: GuildSweepResult = {
+    ...emptyGuildResult(guild.id, "ok"),
+    candidates: plan.candidates.length,
+    revokeDisabled: plan.revokeDisabled,
+  };
+  for (const candidate of plan.candidates) {
+    await applyCandidate(guild, plan.roleId, candidate, result, deps);
+  }
+  logger.info("active member sweep done", {
+    guild: guild.id,
+    candidates: result.candidates,
+    granted: result.granted,
+    revoked: result.revoked,
+    failed: result.failed,
+    window: plan.window,
+    revokeDisabled: plan.revokeDisabled,
+  });
+  return result;
+}
+
+function overallStatus(guilds: GuildSweepResult[]): SweepStatus {
+  if (guilds.some((g) => g.status === "failed")) return "failed";
+  if (guilds.length > 0 && guilds.every((g) => g.status === "skipped")) return "skipped";
+  return "ok";
+}
+
+/** A sweep that did not get to any guild (client not ready, or crashed). */
+export function emptySweep(
+  status: SweepStatus,
+  reason: SweepSkipReason | string,
+  at: Date = new Date(),
+): ActiveMemberSweepResult {
+  const iso = at.toISOString();
+  return { status, reason, startedAt: iso, finishedAt: iso, guilds: [] };
+}
+
+/** Run the active-member gate across every given guild (spec M4). */
 export async function runActiveMemberSweep(
   guilds: Iterable<Guild>,
   deps: ActiveMemberDeps,
-): Promise<void> {
+): Promise<ActiveMemberSweepResult> {
+  const startedAt = new Date().toISOString();
+  const results: GuildSweepResult[] = [];
   for (const guild of guilds) {
     try {
-      await sweepGuild(guild, deps);
+      results.push(await sweepGuild(guild, deps));
     } catch (error) {
       deps.logger.error("active member sweep failed", {
         guild: guild.id,
         error: errMessage(error),
       });
+      results.push(emptyGuildResult(guild.id, "failed", errMessage(error)));
     }
   }
+  return {
+    status: overallStatus(results),
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    guilds: results,
+  };
 }

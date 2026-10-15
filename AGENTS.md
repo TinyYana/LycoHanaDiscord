@@ -16,6 +16,15 @@ it into a general bot platform, add a web dashboard, or introduce an economy /
 shop / RPG layer unless explicitly asked — those are noted as possible future
 work, not current goals. Prefer the smallest change that satisfies the request.
 
+**Explicit exception — local admin panel** (`apps/bot/src/admin/`, requested by
+the operator): a single-page panel served by `node:http` on `127.0.0.1` only
+(default port 2615, `ADMIN_PANEL_PORT` / `ADMIN_PANEL_ENABLED`). It shows runtime
+status, the active-member read-only preview and edits the active-member
+settings. Keep it that small: no remote binding, no auth system, no shell /
+SQL / bulk role actions, no "apply" button, no frontend framework or new
+dependencies. Every write passes the Host/Origin/JSON/CSRF guard
+(`admin/guard.ts`); all page text lives in the messages file (`admin.*` keys).
+
 ## Architecture
 
 pnpm workspace monorepo, three packages with a strict dependency direction:
@@ -57,16 +66,19 @@ apps/bot         →  discord.js client, commands, events, schedulers (depends o
 
 ## Commands
 
-| Command             | Purpose                                      |
-| ------------------- | -------------------------------------------- |
-| `pnpm build`        | Build all packages (`tsc -b`)                |
-| `pnpm typecheck`    | Type-check without emit                      |
-| `pnpm lint`         | ESLint across the workspace                  |
-| `pnpm format`       | Prettier write                               |
-| `pnpm format:check` | Prettier check                               |
-| `pnpm dev`          | Run the bot with file watching               |
-| `pnpm db:generate`  | Generate a migration from the Drizzle schema |
-| `pnpm db:migrate`   | Apply migrations to the database             |
+| Command                  | Purpose                                      |
+| ------------------------ | -------------------------------------------- |
+| `pnpm build`             | Build all packages (`tsc -b`)                |
+| `pnpm typecheck`         | Type-check without emit                      |
+| `pnpm lint`              | ESLint across the workspace                  |
+| `pnpm format`            | Prettier write                               |
+| `pnpm format:check`      | Prettier check                               |
+| `pnpm dev`               | Run the bot with file watching               |
+| `pnpm db:generate`       | Generate a migration from the Drizzle schema |
+| `pnpm db:migrate`        | Apply migrations to the database             |
+| `pnpm bot:update`        | `git pull` + frozen install + build          |
+| `pnpm bot:pm2`           | `pm2 startOrRestart ecosystem.config.cjs`    |
+| `pnpm commands:register` | Force slash-command registration (operator)  |
 
 **Before claiming a task is done:** `pnpm build && pnpm typecheck && pnpm lint`
 must pass, and Prettier must be clean. Add a targeted smoke test for DB or

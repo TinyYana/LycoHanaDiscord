@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title></title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <!-- All visible text comes from the messages file via /api/bootstrap (data-text keys). -->
+    <svg class="defs" aria-hidden="true" focusable="false">
+      <symbol id="lily" viewBox="0 0 48 48">
+        <path class="lily-stem" d="M24 27.5V47" fill="none" stroke="currentColor" />
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7">
+          <path d="M24 27C16.5 27.5 9 26 6.5 18.5" />
+          <path d="M24 27C18 23.5 12.5 18 12.5 10" />
+          <path d="M24 27C21.5 21 19.5 13 21.5 5" />
+          <path d="M24 27C26.5 21 28.5 13 26.5 5" />
+          <path d="M24 27C30 23.5 35.5 18 35.5 10" />
+          <path d="M24 27C31.5 27.5 39 26 41.5 18.5" />
+        </g>
+        <g fill="currentColor">
+          <circle cx="6.4" cy="17.4" r="1.6" />
+          <circle cx="12.6" cy="8.9" r="1.6" />
+          <circle cx="21.7" cy="3.9" r="1.6" />
+          <circle cx="26.3" cy="3.9" r="1.6" />
+          <circle cx="35.4" cy="8.9" r="1.6" />
+          <circle cx="41.6" cy="17.4" r="1.6" />
+          <path d="M24 28C19.5 24 13.5 23.5 11 27.5C14.5 25.5 19 26.5 24 28Z" />
+          <path d="M24 28C28.5 24 34.5 23.5 37 27.5C33.5 25.5 29 26.5 24 28Z" />
+          <path d="M24 28C20.5 23.5 19 18 21.5 14.5C21 19 22 23 24 28Z" />
+          <path d="M24 28C27.5 23.5 29 18 26.5 14.5C27 19 26 23 24 28Z" />
+          <path d="M24 28.5C21 26.5 17 27.5 16 31C18.5 28.8 21.5 28.8 24 28.5Z" />
+          <path d="M24 28.5C27 26.5 31 27.5 32 31C29.5 28.8 26.5 28.8 24 28.5Z" />
+        </g>
+      </symbol>
+    </svg>
+
+    <header class="band">
+      <svg class="band-flower" aria-hidden="true" focusable="false"><use href="#lily" /></svg>
+      <div class="band-inner">
+        <div class="appbar">
+          <div class="brand">
+            <svg class="mark" aria-hidden="true" focusable="false"><use href="#lily" /></svg>
+            <h1 data-text="admin.title.page"></h1>
+            <span class="chip chip-local" data-text="admin.title.localBadge"></span>
+          </div>
+          <button
+            type="button"
+            id="refresh"
+            class="btn btn-band"
+            data-text="admin.button.refresh"
+          ></button>
+        </div>
+
+        <section class="status" aria-labelledby="status-title">
+          <h2 id="status-title" class="sr-only" data-text="admin.section.status"></h2>
+          <div id="metrics" class="status-groups"></div>
+          <p id="sweep-note" class="status-note" hidden></p>
+        </section>
+
+        <nav class="guild-switch" aria-labelledby="guild-label">
+          <span id="guild-label" class="guild-label" data-text="admin.label.guild"></span>
+          <div id="guild-tabs" class="guild-tabs"></div>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <p id="global-error" class="banner tone-bad" role="alert" hidden></p>
+      <p id="no-guilds" class="empty" data-text="admin.label.noGuilds" hidden></p>
+
+      <div id="guild-panels" class="workspace" hidden>
+        <section class="panel preview" aria-labelledby="preview-title">
+          <header class="guild-head">
+            <div class="guild-id">
+              <h2 id="guild-name" class="guild-name"></h2>
+              <p id="guild-sweep" class="meta"></p>
+            </div>
+            <button
+              type="button"
+              id="reload-preview"
+              class="btn"
+              data-text="admin.button.preview"
+            ></button>
+          </header>
+
+          <div class="sim">
+            <div class="preview-head">
+              <h3 id="preview-title" data-text="admin.section.preview"></h3>
+              <span class="chip chip-preview" data-text="admin.preview.tag"></span>
+              <p class="meta preview-notice" data-text="admin.preview.notice"></p>
+            </div>
+
+            <dl id="preview-facts" class="facts"></dl>
+            <p id="preview-alert" class="banner tone-warn" hidden></p>
+
+            <div class="table-tools">
+              <div id="action-filters" class="segmented" role="group"></div>
+              <label class="search">
+                <span class="sr-only" data-text="admin.preview.filter"></span>
+                <input id="filter" type="search" data-placeholder="admin.preview.filter" />
+              </label>
+            </div>
+            <table class="candidates">
+              <thead>
+                <tr>
+                  <th class="col-action" data-text="admin.preview.col.action"></th>
+                  <th class="col-user" data-text="admin.preview.col.user"></th>
+                  <th class="num col-score" data-text="admin.preview.col.score"></th>
+                  <th class="col-role" data-text="admin.preview.col.role"></th>
+                  <th class="col-reason" data-text="admin.preview.col.reason"></th>
+                </tr>
+              </thead>
+              <tbody id="candidates"></tbody>
+            </table>
+            <p id="candidates-empty" class="empty" data-text="admin.preview.empty" hidden></p>
+          </div>
+        </section>
+
+        <aside class="panel settings" aria-labelledby="settings-title">
+          <h3 id="settings-title" data-text="admin.section.settings"></h3>
+          <form id="settings-form" novalidate>
+            <div class="field field-role">
+              <label for="role" data-text="admin.settings.role"></label>
+              <span class="select"><select id="role"></select></span>
+              <span class="field-error" id="error-activeMemberRoleId"></span>
+            </div>
+            <fieldset>
+              <legend data-text="admin.settings.thresholds"></legend>
+              <div id="group-thresholds" class="field-grid"></div>
+            </fieldset>
+            <fieldset>
+              <legend data-text="admin.settings.weights"></legend>
+              <div id="group-weights" class="field-grid"></div>
+            </fieldset>
+            <fieldset>
+              <legend data-text="admin.settings.exempt"></legend>
+              <div id="exempt" class="checks"></div>
+              <span class="field-error" id="error-exemptRoleIds"></span>
+            </fieldset>
+            <div id="settings-warnings" class="banner tone-warn" hidden>
+              <strong data-text="admin.settings.warnings"></strong>
+              <ul id="settings-warning-list"></ul>
+            </div>
+            <div class="form-foot">
+              <button
+                type="submit"
+                id="save"
+                class="btn btn-primary"
+                data-text="admin.button.save"
+              ></button>
+              <p class="meta" data-text="admin.save.hint"></p>
+              <div id="settings-result" class="banner" role="status" hidden></div>
+            </div>
+          </form>
+        </aside>
+      </div>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

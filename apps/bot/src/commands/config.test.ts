@@ -1,10 +1,10 @@
 import { ApplicationCommandOptionType, ChannelType } from "discord.js";
 import { describe, expect, it } from "vitest";
-import { config } from "./config";
+import { createConfigCommand } from "./config";
 
 describe("/config dynamic-voice", () => {
   it("accepts an enabled flag and a voice-only trigger channel", () => {
-    const command = config.data.toJSON();
+    const command = createConfigCommand({ t: (key) => key, withPrefix: () => ({}) }).data.toJSON();
     const subcommand = command.options?.find((option) => option.name === "dynamic-voice");
 
     expect(subcommand?.type).toBe(ApplicationCommandOptionType.Subcommand);

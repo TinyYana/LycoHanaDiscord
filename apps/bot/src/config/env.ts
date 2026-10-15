@@ -8,6 +8,9 @@ import {
   DEFAULT_HONEYPOT_TIMEOUT_SECONDS,
 } from "@lycohana/domain";
 
+/** Default local admin panel port (override with ADMIN_PANEL_PORT). */
+export const DEFAULT_ADMIN_PANEL_PORT = 2615;
+
 /**
  * Environment schema. All secrets and tunable runtime config flow through
  * here so nothing tunable is hardcoded (spec §1.6, §8). Domain constants
@@ -20,12 +23,22 @@ const envSchema = z.object({
   DISCORD_TOKEN: z.string().min(1, "DISCORD_TOKEN is required"),
   DISCORD_CLIENT_ID: z.string().min(1, "DISCORD_CLIENT_ID is required"),
   DISCORD_GUILD_ID: z.string().optional(),
+  // Slash-command registration at startup: `auto` registers only when the
+  // command definitions (or target) changed since the last successful push,
+  // `always` registers every start, `off` never (use `pnpm commands:register`).
+  COMMANDS_REGISTER_MODE: z.enum(["auto", "always", "off"]).default("auto"),
+  // Where `auto` remembers the last registered definitions' hash (repo-root relative).
+  COMMANDS_HASH_FILE: z.string().min(1).default(".runtime/commands.hash"),
 
   // Database (PostgreSQL connection string — Supabase)
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   // Runtime
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  // Operator-facing text (hot-reloaded on change; repo-root relative).
+  MESSAGES_FILE: z.string().min(1).default("apps/bot/messages/zh-TW.json"),
+  // Graceful-shutdown cap. Keep below PM2's kill_timeout (ecosystem.config.cjs).
+  SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
 
   // Activity tunables (spec §8). Defaults come from @lycohana/domain.
   ACTIVITY_TIME_ZONE: z.string().min(1).default(ACTIVITY_TIME_ZONE),
@@ -71,6 +84,11 @@ const envSchema = z.object({
   // Grace window before an emptied dynamic voice channel is deleted, so a brief
   // disconnect/reconnect doesn't destroy the room. 0 = delete immediately.
   DYNAMIC_VOICE_EMPTY_GRACE_SECONDS: z.coerce.number().int().nonnegative().default(60),
+
+  // Local admin panel. Always bound to 127.0.0.1 (not configurable); reach it
+  // remotely only through your own SSH tunnel.
+  ADMIN_PANEL_ENABLED: z.enum(["true", "false"]).default("true"),
+  ADMIN_PANEL_PORT: z.coerce.number().int().min(1).max(65535).default(DEFAULT_ADMIN_PANEL_PORT),
 });
 
 export type Env = z.infer<typeof envSchema>;
