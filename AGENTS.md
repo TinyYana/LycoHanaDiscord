@@ -116,9 +116,5 @@ command-shape changes where practical. State honestly what was and was not run.
 ## Commits
 
 Conventional Commits (`feat`, `fix`, `refactor`, `docs`, `chore`, `test`),
-scoped by feature (e.g. `feat(honeypot): …`). Keep commits focused. End commit
-messages with:
-
-```
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
-```
+scoped by feature (e.g. `feat(honeypot): …`). Keep commits focused. Commit as
+TinyYana only — no AI attribution, `Co-Authored-By` trailers, or session links.
